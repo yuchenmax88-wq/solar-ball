@@ -10,6 +10,9 @@ tests = [
     "test_mqtt_protocol.py",
     "test_power.py",
     "test_calibration.py",
+    "test_weather.py",
+    "test_saturation.py",
+    "test_remote_diag.py",
 ]
 
 all_ok = True
