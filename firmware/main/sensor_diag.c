@@ -1,6 +1,7 @@
 #include "sensor_diag.h"
 #include "sensor_scan.h"
 #include "calibrate.h"
+#include "mqtt_protocol.h"
 #include "config.h"
 #include "esp_log.h"
 #include <math.h>
