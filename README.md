@@ -80,21 +80,21 @@ solar-ball/
 ├── firmware/
 │   ├── platformio.ini               PlatformIO build config
 │   ├── CMakeLists.txt               ESP-IDF CMake build
-│   ├── include/
-│   │   ├── config.h                 Pin mappings, broker, APN
-│   │   ├── sensor_positions.h       80 Fibonacci unit vectors
-│   │   ├── sensor_calib.h           Calibration data structures
-│   │   └── mqtt_protocol.h          MQTT wire format
-│   ├── src/
-│   │   ├── main.c                   Boot → scan → compute → publish → sleep
-│   │   ├── sensor_scan.c/.h         80-ch MUX + ADS1115 ADC driver
-│   │   ├── direction.c/.h           Weighted centroid algorithm
-│   │   ├── mqtt_4g.c/.h             SIM7600G AT command MQTT driver
-│   │   ├── power.c/.h               Battery ADC + deep sleep
-│   │   ├── calibrate.c/.h           NVS storage + auto-calibration
-│   │   └── sun_calc.c/.h            NOAA solar ephemeris
+│   ├── main/
+│   │   ├── CMakeLists.txt            Component registration
+│   │   ├── config.h                  Pin mappings, broker, APN
+│   │   ├── sensor_positions.h        80 Fibonacci unit vectors
+│   │   ├── sensor_calib.h            Calibration data structures
+│   │   ├── mqtt_protocol.h           MQTT wire format
+│   │   ├── main.c                    Boot → scan → compute → publish → sleep
+│   │   ├── sensor_scan.c/.h          80-ch MUX + ADS1115 ADC driver
+│   │   ├── direction.c/.h            Weighted centroid algorithm
+│   │   ├── mqtt_4g.c/.h              SIM7600G AT command MQTT driver
+│   │   ├── power.c/.h                Battery ADC + deep sleep
+│   │   ├── calibrate.c/.h            NVS storage + auto-calibration
+│   │   └── sun_calc.c/.h             NOAA solar ephemeris
 │   └── scripts/
-│       └── generate_sensor_coords.py Fibonacci sphere coordinate generator
+│       └── generate_sensor_coords.py  Fibonacci sphere coordinate generator
 ├── tools/
 │   ├── auto_calibrate.py            Calibration tool (manual + auto modes)
 │   └── requirements.txt
