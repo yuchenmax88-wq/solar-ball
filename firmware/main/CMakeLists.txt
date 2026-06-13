@@ -1,14 +1,14 @@
 idf_component_register(
     SRCS
-        main.c
-        sensor_scan.c
-        direction.c
-        mqtt_4g.c
-        power.c
-        calibrate.c
-        sun_calc.c
+        ../src/main.c
+        ../src/sensor_scan.c
+        ../src/direction.c
+        ../src/mqtt_4g.c
+        ../src/power.c
+        ../src/calibrate.c
+        ../src/sun_calc.c
     INCLUDE_DIRS
-        .
+        ../include
     REQUIRES
         driver
         nvs_flash
