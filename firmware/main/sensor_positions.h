@@ -98,7 +98,7 @@ const vec3_t SENSOR_POSITIONS[SENSOR_COUNT] = {
     { -0.5067279f, -0.3154370f, -0.8023256f },  // #77, z=-0.8023
     { 0.1518000f, 0.5434815f, -0.8255814f },  // #78, z=-0.8256
     { 0.2390716f, -0.4715084f, -0.8488372f },  // #79, z=-0.8488
-}};
+};
 
 /*
  * Each sensor's physical channel ID -> position index mapping.

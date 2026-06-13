@@ -25,7 +25,7 @@ int mqtt_publish_direction(const direction_packet_t *pkt);
  * Get current RSSI (signal strength) in dBm.
  * Returns -140 to -44 (dBm), or -999 if unknown.
  */
-int8_t modem_get_rssi(void);
+int16_t modem_get_rssi(void);
 
 /*
  * Synchronize system time via NTP through the 4G connection.

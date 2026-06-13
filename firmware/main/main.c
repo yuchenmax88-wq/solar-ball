@@ -92,7 +92,7 @@ void app_main(void) {
     uint8_t soc = power_get_soc();
 
     /* Initialize 4G and publish */
-    int8_t rssi = -999;
+    int16_t rssi = -999;
     int publish_ok = -1;
 
     if (modem_init() == 0) {

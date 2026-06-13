@@ -69,7 +69,7 @@ const vec3_t SENSOR_POSITIONS[SENSOR_COUNT] = {{
         for i, (x, y, z) in enumerate(filtered):
             f.write("    {{ {:.7f}f, {:.7f}f, {:.7f}f }},  // #{i:02d}, z={z:.4f}\n".format(x, y, z, i=i, z=z))
 
-        f.write("""}};
+        f.write("""};
 
 /*
  * Each sensor's physical channel ID -> position index mapping.

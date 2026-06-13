@@ -28,6 +28,8 @@
  */
 
 #include <stdint.h>
+#include <stdio.h>
+#include "config.h"
 
 #define MQTT_TOPIC_MAX_LEN      64
 #define MQTT_PAYLOAD_MAX_LEN    256
@@ -40,7 +42,7 @@ typedef struct __attribute__((packed)) {
     float    dy;            /* direction unit vector Y */
     float    dz;            /* direction unit vector Z */
     uint8_t  soc;           /* battery state of charge [0-100] */
-    int8_t   rssi;          /* 4G signal strength [dBm] */
+    int16_t  rssi;          /* 4G signal strength [dBm] */
 } direction_packet_t;
 
 /*

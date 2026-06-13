@@ -173,13 +173,13 @@ int modem_init(void) {
     return 0;
 }
 
-int8_t modem_get_rssi(void) {
+int16_t modem_get_rssi(void) {
     uart_send("AT+CSQ");
     if (uart_wait_response("+CSQ:", 3000) == 0) {
         int rssi_raw;
         if (sscanf(resp_buf, "+CSQ: %d,", &rssi_raw) == 1) {
             if (rssi_raw == 99) return -999;
-            return (int8_t)(-113 + rssi_raw * 2);
+            return (int16_t)(-113 + rssi_raw * 2);
         }
     }
     return -999;
