@@ -83,22 +83,49 @@ def on_message(client, userdata, msg):
         return
 
     ball_id = data.get("id", "?")
+    ts = data.get("ts", 0)
     dx = data.get("dx", 0.0)
     dy = data.get("dy", 0.0)
     dz = data.get("dz", 0.0)
     soc = data.get("soc", 0)
     rssi = data.get("rssi", 0)
-    
+    error_mask = data.get("err", 0)
+    confidence = data.get("conf", 0)
+    flags = data.get("flags", 0)
+
     az, elev = vector_to_angles(dx, dy, dz)
     panel_az, panel_tilt = compute_panel_orientation(az, elev)
-    
-    # Verify unit vector validity
+
+    # Fault decoding
+    fault_names = []
+    FAULTS = {
+        0x0001: "SENSOR_OPEN", 0x0002: "SENSOR_SHORT", 0x0004: "SATURATED",
+        0x0008: "ADC_ERR", 0x0010: "MODEM_ERR", 0x0020: "MQTT_ERR",
+        0x0040: "LOW_BAT", 0x0080: "NO_CALIB", 0x0100: "OVERCAST", 0x0200: "NIGHT",
+    }
+    for mask, name in FAULTS.items():
+        if error_mask & mask:
+            fault_names.append(name)
+
+    # Flag decoding
+    flag_str = ""
+    if flags & 0x01: flag_str += "DIR_OK "
+    if flags & 0x02: flag_str += "OVERCAST "
+    if flags & 0x04: flag_str += "NIGHT "
+    if flags & 0x08: flag_str += "CALIB "
+    if flags & 0x10: flag_str += "BASELINE "
+
+    # Validate
     mag = math.sqrt(dx*dx + dy*dy + dz*dz)
     valid = "OK" if 0.99 < mag < 1.01 else "BAD"
-    
-    print(f"[{ball_id}] Sun: az={az:6.1f}° elev={elev:+5.1f}°  "
-          f"Panel: az={panel_az:6.1f}° tilt={panel_tilt:4.1f}°  "
-          f"SOC={soc}% RSSI={rssi}dBm  vector:{valid}")
+
+    ts_str = time.strftime("%H:%M:%S", time.localtime(ts)) if ts > 0 else "no_time"
+    fault_str = ",".join(fault_names) if fault_names else "none"
+
+    print(f"[{ball_id}] {ts_str} Sun: az={az:6.1f} deg elev={elev:+5.1f} deg  "
+          f"Panel: az={panel_az:6.1f} deg tilt={panel_tilt:4.1f} deg  "
+          f"SOC={soc}% RSSI={rssi}dBm conf={confidence}")
+    print(f"  Faults: {fault_str}  Flags: [{flag_str}]  vector:{valid}")
 
     # Here you would send panel_azimuth and panel_tilt to your
     # solar array motor controller via serial/Modbus/CAN/etc.

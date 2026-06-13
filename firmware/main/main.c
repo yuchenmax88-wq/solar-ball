@@ -71,31 +71,29 @@ void app_main(void) {
         ESP_LOGW(TAG, "No calibration data found. Using default normalization.");
     }
 
-    /* ---- Sensor scan ---- */
+    /* ---- Sensor scan (single pass: normalized + raw diagnostics) ---- */
     float sensor_values[SENSOR_COUNT];
-    int scan_ok = sensor_scan_all(sensor_values);
+    uint16_t raw_avgs[SENSOR_COUNT];
+    int scan_ok = sensor_scan_all_with_raw(sensor_values, raw_avgs);
 
-    /* Collect raw values for diagnostics (re-scan raw, single pass) */
+    /* Build diagnostic result from the same scan */
     sensor_diag_result_t diag;
     memset(&diag, 0, sizeof(diag));
     diag.max_raw = 0;
     diag.min_raw = 0xFFFF;
-    float variance_sum = 0.0f;
-    float variance_mean = 0.0f;
+    float raw_mean = 0.0f;
 
     for (int phys = 0; phys < SENSOR_COUNT; phys++) {
-        int bank = phys / MUX_CHANNELS_PER_BANK;
-        int ch = phys % MUX_CHANNELS_PER_BANK;
-        uint16_t raw = sensor_read_raw(bank, ch);
-        diag.raw_values[phys] = raw;
-        if (raw > diag.max_raw) diag.max_raw = raw;
-        if (raw < diag.min_raw) diag.min_raw = raw;
-        variance_mean += (float)raw;
+        diag.raw_values[phys] = raw_avgs[phys];
+        if (raw_avgs[phys] > diag.max_raw) diag.max_raw = raw_avgs[phys];
+        if (raw_avgs[phys] < diag.min_raw) diag.min_raw = raw_avgs[phys];
+        raw_mean += (float)raw_avgs[phys];
     }
-    variance_mean /= SENSOR_COUNT;
+    raw_mean /= SENSOR_COUNT;
 
+    float variance_sum = 0.0f;
     for (int phys = 0; phys < SENSOR_COUNT; phys++) {
-        float diff = (float)diag.raw_values[phys] - variance_mean;
+        float diff = (float)raw_avgs[phys] - raw_mean;
         variance_sum += diff * diff;
     }
     diag.variance = variance_sum / SENSOR_COUNT;

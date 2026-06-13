@@ -65,11 +65,6 @@ void calib_run_auto(void);
 int calib_run_sun_auto(void);
 
 /*
- * Get the current calibration state.
- */
-calib_state_t calib_get_state(void);
-
-/*
  * Check if calibration data has been loaded.
  * Returns 1 if a non-identity channel-to-position mapping exists.
  */

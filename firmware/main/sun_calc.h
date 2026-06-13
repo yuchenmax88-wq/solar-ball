@@ -24,8 +24,6 @@
  *   4. One scan of all 80 channels → match readings to positions
  */
 
-vec3_t sun_calc_direction(float lat, float lon, float alt_m, uint32_t unix_ts);
-
 /*
  * Simplified: lat/lon from int (degrees * 1e6, as GPS modules often provide).
  */

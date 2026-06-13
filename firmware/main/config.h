@@ -8,7 +8,7 @@
 
 /* ---------- Ball Identity ---------- */
 #define BALL_ID                 "ball-001"
-#define FIRMWARE_VERSION        "1.0.0"
+#define FIRMWARE_VERSION        "1.1.0"
 
 /* ---------- Sensor Sampling ---------- */
 #define SENSOR_COUNT            80

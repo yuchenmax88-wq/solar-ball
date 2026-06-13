@@ -398,10 +398,6 @@ void calib_run_auto(void) {
     }
 }
 
-calib_state_t calib_get_state(void) {
-    return g_calib_state;
-}
-
 int calib_has_mapping(void) {
     for (int i = 0; i < SENSOR_COUNT; i++) {
         if (g_calib.channel_map[i] != i) return 1;

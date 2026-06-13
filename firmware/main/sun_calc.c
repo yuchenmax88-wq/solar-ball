@@ -13,7 +13,7 @@ static double unix_to_julian(uint32_t unix_ts) {
     return JD2000 + (unix_ts - UNIX2000_12H) / 86400.0;
 }
 
-vec3_t sun_calc_direction(float lat, float lon, float alt_m, uint32_t unix_ts) {
+static vec3_t sun_calc_direction(float lat, float lon, float alt_m, uint32_t unix_ts) {
     double jd = unix_to_julian(unix_ts);
     double n = jd - JD2000;
 

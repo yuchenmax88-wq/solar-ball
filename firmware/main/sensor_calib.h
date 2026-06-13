@@ -22,12 +22,6 @@ typedef struct {
     uint8_t  channel_map[SENSOR_COUNT];/* position index -> physical channel */
 } calib_data_t;
 
-/* Wall clock time source (set via 4G NTP or manual) */
-typedef struct {
-    uint32_t unix_ts;
-    uint8_t  is_synced;
-} time_sync_t;
-
 /*
  * Calibration states for the auto-calibration state machine.
  *

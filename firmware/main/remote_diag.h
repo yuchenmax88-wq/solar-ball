@@ -34,19 +34,4 @@ void remote_diag_record_publish(uint8_t success);
 /* Record a sensor scan result count */
 void remote_diag_record_scan(void);
 
-/* Build a diag snapshot with current state */
-void remote_diag_build_snapshot(remote_diag_snapshot_t *snap,
-                                const char *ball_id,
-                                uint32_t battery_mv,
-                                int16_t rssi,
-                                uint16_t error_mask,
-                                uint8_t confidence,
-                                uint8_t flags,
-                                uint8_t fault_count,
-                                uint8_t tz_hours);
-
-/* Serialize snapshot to JSON string */
-int remote_diag_serialize(const remote_diag_snapshot_t *snap,
-                          char *buf, size_t buf_len);
-
 #endif /* REMOTE_DIAG_H */

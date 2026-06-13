@@ -21,10 +21,7 @@ static const char *TAG = "sensor_diag";
 #define SATURATION_THRESHOLD    (0.05f * 65535.0f)
 
 
-uint16_t sensor_diag_check_channel(uint16_t raw_value, uint16_t min_raw, uint16_t max_raw) {
-    (void)min_raw;
-    (void)max_raw;
-
+uint16_t sensor_diag_check_channel(uint16_t raw_value) {
     if (raw_value >= (uint16_t)OPEN_THRESHOLD) {
         return FAULT_SENSOR_OPEN;
     }
@@ -52,7 +49,7 @@ void sensor_diag_analyze(const sensor_diag_result_t *diag,
     /* ---- Check individual sensor faults ---- */
     for (int phys = 0; phys < SENSOR_COUNT; phys++) {
         uint16_t fault = sensor_diag_check_channel(
-            diag->raw_values[phys], diag->min_raw, diag->max_raw);
+            diag->raw_values[phys]);
 
         if (fault == FAULT_SENSOR_OPEN || fault == FAULT_SENSOR_SHORT) {
             faults |= fault;

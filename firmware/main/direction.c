@@ -7,7 +7,7 @@
  * Bottom 30 degrees threshold.
  * Sensors with z < cos(150 deg) ~ -0.866 are excluded.
  */
-#define Z_EXCLUDE_THRESHOLD  (-0.8660254f)  /* cos(150�) */
+#define Z_EXCLUDE_THRESHOLD  (-0.8660254f)  /* cos(150 deg) */
 
 /*
  * 80 sensor positions on the unit sphere.

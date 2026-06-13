@@ -152,7 +152,7 @@ uint16_t sensor_read_raw(int bank, int channel) {
     return value;
 }
 
-int sensor_scan_all(float out[SENSOR_COUNT]) {
+int sensor_scan_all_with_raw(float out[SENSOR_COUNT], uint16_t raw_avg_out[SENSOR_COUNT]) {
     uint32_t raw_sum[SENSOR_COUNT];
     memset(raw_sum, 0, sizeof(raw_sum));
     uint16_t max_raw = 0;
@@ -204,6 +204,11 @@ int sensor_scan_all(float out[SENSOR_COUNT]) {
         uint16_t raw_avg = raw_sum[physical] / SENSOR_OVERSAMPLE;
         uint8_t position_idx = g_channel_to_position[physical];
 
+        /* Save raw average if caller requested it */
+        if (raw_avg_out) {
+            raw_avg_out[physical] = raw_avg;
+        }
+
         if (position_idx >= SENSOR_COUNT) {
             continue;  /* unmapped channel, skip */
         }
@@ -220,4 +225,8 @@ int sensor_scan_all(float out[SENSOR_COUNT]) {
     }
 
     return 0;
+}
+
+int sensor_scan_all(float out[SENSOR_COUNT]) {
+    return sensor_scan_all_with_raw(out, NULL);
 }

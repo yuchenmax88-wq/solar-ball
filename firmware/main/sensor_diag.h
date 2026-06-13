@@ -2,7 +2,7 @@
 #define SENSOR_DIAG_H
 
 #include <stdint.h>
-#include "mqtt_protocol.h"
+#include "config.h"
 
 /*
  * Sensor diagnostic and weather classification.
@@ -15,7 +15,7 @@
 
 /* Raw sensor scan result used by diagnostics */
 typedef struct {
-    uint16_t raw_values[80];     /* raw ADC per physical channel */
+    uint16_t raw_values[SENSOR_COUNT];     /* raw ADC per physical channel */
     uint16_t max_raw;            /* highest raw (darkest sensor) */
     uint16_t min_raw;            /* lowest raw (brightest sensor) */
     float    variance;           /* variance of raw readings */
@@ -36,6 +36,6 @@ void sensor_diag_analyze(const sensor_diag_result_t *diag,
  * Check if a single sensor appears faulty.
  * Returns FAULT_SENSOR_OPEN, FAULT_SENSOR_SHORT, or 0.
  */
-uint16_t sensor_diag_check_channel(uint16_t raw_value, uint16_t min_raw, uint16_t max_raw);
+uint16_t sensor_diag_check_channel(uint16_t raw_value);
 
 #endif /* SENSOR_DIAG_H */
