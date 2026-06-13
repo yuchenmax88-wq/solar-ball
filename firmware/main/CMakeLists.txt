@@ -13,6 +13,6 @@ idf_component_register(
         driver
         nvs_flash
         esp_adc
-        esp_sleep
+        esp_hw_support
         esp_timer
 )
