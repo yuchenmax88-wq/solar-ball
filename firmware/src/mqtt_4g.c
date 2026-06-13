@@ -6,6 +6,7 @@
 #include "esp_log.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 static const char *TAG = "mqtt_4g";
 

@@ -4,6 +4,7 @@
 #include "esp_adc/adc_cali.h"
 #include "esp_log.h"
 #include <math.h>
+#include <stdbool.h>
 
 static const char *TAG = "power";
 
@@ -28,6 +29,7 @@ void power_init(void) {
 
     adc_cali_line_fitting_config_t cali_config = {
         .unit_id = ADC_UNIT_1,
+        .chan = ADC_CHANNEL,
         .atten = ADC_ATTEN_DB_11,
         .bitwidth = ADC_BITWIDTH_12,
     };
