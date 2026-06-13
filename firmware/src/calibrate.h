@@ -55,9 +55,31 @@ int calib_save(void);
 void calib_run_auto(void);
 
 /*
+ * Run autonomous sun-based calibration.
+ * Uses 4G location + NTP time + solar ephemeris to compute sun direction,
+ * then maps all 80 channels via brightness-ranking in a single outdoor scan.
+ * No manual flashlight alignment needed.
+ *
+ * Returns 0 on success, -1 on failure.
+ */
+int calib_run_sun_auto(void);
+
+/*
  * Get the current calibration state.
  */
 calib_state_t calib_get_state(void);
+
+/*
+ * Check if calibration data has been loaded.
+ * Returns 1 if a non-identity channel-to-position mapping exists.
+ */
+int calib_has_mapping(void);
+
+/*
+ * Check if baseline normalization data exists.
+ * Returns 1 if any sensor has a non-zero baseline value.
+ */
+int calib_has_baseline(void);
 
 /* Global calibration data */
 extern calib_data_t g_calib;

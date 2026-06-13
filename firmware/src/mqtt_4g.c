@@ -101,18 +101,26 @@ int modem_init(void) {
 
     /* Wait for network registration */
     ESP_LOGI(TAG, "Waiting for network registration...");
+    int registered = 0;
     for (int retry = 0; retry < 10; retry++) {
         uart_send("AT+CREG?");
-        if (uart_wait_response("+CREG: 0,1", 3000) == 0) {
-            ESP_LOGI(TAG, "Network registered (home network)");
-            break;
-        }
-        if (uart_wait_response("+CREG: 0,5", 3000) == 0) {
-            ESP_LOGI(TAG, "Network registered (roaming)");
-            break;
+        if (uart_wait_response("+CREG:", 3000) == 0) {
+            if (strstr(resp_buf, "+CREG: 0,1") != NULL) {
+                ESP_LOGI(TAG, "Network registered (home network)");
+                registered = 1;
+                break;
+            }
+            if (strstr(resp_buf, "+CREG: 0,5") != NULL) {
+                ESP_LOGI(TAG, "Network registered (roaming)");
+                registered = 1;
+                break;
+            }
         }
         ESP_LOGI(TAG, "Waiting for network... attempt %d/10", retry + 1);
         vTaskDelay(pdMS_TO_TICKS(3000));
+    }
+    if (!registered) {
+        ESP_LOGW(TAG, "Network registration timeout, continuing anyway");
     }
 
     /* Attach to GPRS */
@@ -219,6 +227,79 @@ int mqtt_publish_direction(const direction_packet_t *pkt) {
 
     ESP_LOGI(TAG, "Published to %s: %s", topic, payload);
     return payload_len;
+}
+
+int modem_get_location(int32_t *lat_e6, int32_t *lon_e6) {
+    /* AT+CIPGSMLOC=1,1: get cell tower location (network-based positioning)
+     * Response: +CIPGSMLOC: 0,<result>,<latitude>,<longitude>,<datetime>
+     * Latitude/longitude are in degrees * 1e6, as signed integers.
+     */
+    uart_send("AT+CIPGSMLOC=1,1");
+    if (uart_wait_response("+CIPGSMLOC:", 15000) == 0) {
+        long lat_raw = 0, lon_raw = 0;
+        if (sscanf(resp_buf, "+CIPGSMLOC: 0,%*d,%ld,%ld", &lat_raw, &lon_raw) >= 2) {
+            *lat_e6 = (int32_t)lat_raw;
+            *lon_e6 = (int32_t)lon_raw;
+            ESP_LOGI(TAG, "Cell location: lat=%.4f lon=%.4f",
+                     *lat_e6 / 1000000.0, *lon_e6 / 1000000.0);
+            return 0;
+        }
+    }
+    ESP_LOGW(TAG, "Cell location query failed");
+    return -1;
+}
+
+int modem_get_unix_time(uint32_t *unix_ts) {
+    /* AT+CCLK? returns current time: +CCLK: "yy/MM/dd,HH:mm:ss±TZ"
+     * After NTP sync, this reflects the synced time in LOCAL time.
+     * TZ is the timezone offset (e.g. +08 for China, -05 for EST).
+     * We must subtract TZ to get UTC before computing Unix timestamp.
+     */
+    uart_send("AT+CCLK?");
+    if (uart_wait_response("+CCLK:", 3000) == 0) {
+        int yy, MM, dd, hh, mm, ss;
+        int tz_hours = 0;
+        int tz_sign = 1;
+
+        /* Parse date/time part first */
+        if (sscanf(resp_buf, "+CCLK: \"%d/%d/%d,%d:%d:%d", &yy, &MM, &dd, &hh, &mm, &ss) < 6) {
+            ESP_LOGW(TAG, "CCLK time parse failed");
+            return -1;
+        }
+
+        /* Find and parse the timezone offset after the time */
+        char *tz_ptr = strchr(resp_buf, '+');
+        if (!tz_ptr) {
+            tz_ptr = strchr(resp_buf, '-');
+            if (tz_ptr) tz_sign = -1;
+        }
+        /* Try to parse the offset again (skip the sign we already found) */
+        if (tz_ptr) {
+            tz_hours = atoi(tz_ptr);  /* atoi handles sign: "+08" → 8, "-05" → -5 */
+        } else {
+            tz_hours = tz_sign * 8;  /* fallback: assume China UTC+8 */
+        }
+
+        /* Convert LOCAL time to UTC by subtracting the offset */
+        hh -= tz_hours;
+        if (hh < 0) { hh += 24; dd -= 1; }
+        if (hh >= 24) { hh -= 24; dd += 1; }
+
+        /* Convert to Unix timestamp (simple algorithm for 2000-2099) */
+        int year = 2000 + yy;
+        int days = (year - 1970) * 365;
+        days += (year - 1969) / 4;  /* leap years */
+        static const int month_days[] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
+        days += month_days[MM - 1] + dd - 1;
+        if (MM > 2 && (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0))) {
+            days += 1;
+        }
+        *unix_ts = (uint32_t)(days * 86400 + hh * 3600 + mm * 60 + ss);
+        ESP_LOGI(TAG, "Unix time: %lu (tz=%+d)", (unsigned long)*unix_ts, tz_hours);
+        return 0;
+    }
+    ESP_LOGW(TAG, "CCLK time query failed");
+    return -1;
 }
 
 void modem_power_off(void) {

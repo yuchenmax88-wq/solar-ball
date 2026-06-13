@@ -154,6 +154,49 @@ class BallCalibrator:
         print(f"\n{Fore.CYAN}Calibration complete. Restart the ball for normal operation.{Style.RESET_ALL}\n")
 
 
+    def auto_sun_calibrate(self):
+        """Run autonomous sun-based calibration (no manual steps)."""
+        print(f"\n{Fore.CYAN}{'='*60}")
+        print("  Solar Ball Sun Auto-Calibration")
+        print(f"{'='*60}{Style.RESET_ALL}\n")
+
+        print(f"{Fore.YELLOW}Prerequisites:{Style.RESET_ALL}")
+        print("  1. Place the ball outdoors under clear sky")
+        print("  2. Ensure 4G SIM is inserted and has signal")
+        print("  3. The ball will automatically locate itself and calibrate\n")
+
+        print(f"{Fore.YELLOW}Sending CAL:SUN_AUTO...{Style.RESET_ALL}")
+
+        # Send start command
+        self.ser.reset_input_buffer()
+        self.send_command("CAL:QUIT", timeout=2)  # exit any previous mode
+        self.send_command("CAL:START", timeout=2)
+        self.send_command("CAL:SUN_AUTO", timeout=5)
+
+        # Wait for result
+        deadline = time.time() + 90  # 4G init + location + scan can take ~60s
+        buf = ""
+        while time.time() < deadline:
+            if self.ser.in_waiting:
+                line = self.ser.readline().decode(errors="replace").strip()
+                buf += line + "\n"
+                print(f"  {line}")
+                if "CAL:SUN_OK" in line:
+                    print(f"\n{Fore.GREEN}✓ Auto-calibration successful!{Style.RESET_ALL}")
+                    self.send_command("CAL:SAVE")
+                    self.send_command("CAL:QUIT")
+                    return True
+                if "CAL:SUN_ERR" in line:
+                    print(f"\n{Fore.RED}✗ Auto-calibration failed!{Style.RESET_ALL}")
+                    print(f"  Reason: {line}")
+                    print(f"  Fall back to manual calibration: python {sys.argv[0]} {self.ser.port}")
+                    return False
+            time.sleep(0.1)
+
+        print(f"\n{Fore.RED}✗ Timeout waiting for calibration result{Style.RESET_ALL}")
+        return False
+
+
 def verify_mapping(port: str) -> bool:
     """Simple verification: checks if saved mapping loads correctly."""
     print(f"\nVerification complete - mapping was saved to NVS.")
@@ -164,15 +207,21 @@ def verify_mapping(port: str) -> bool:
 
 def main():
     if len(sys.argv) < 2:
-        print(f"Usage: python {sys.argv[0]} <COM_PORT>")
-        print(f"Example: python {sys.argv[0]} COM3")
+        print(f"Usage: python {sys.argv[0]} <COM_PORT> [--auto]")
+        print(f"  COM_PORT     - Serial port (e.g. COM3)")
+        print(f"  --auto       - Run sun auto-calibration (no manual steps)")
+        print(f"  (no flag)    - Run manual flashlight calibration")
         sys.exit(1)
 
     port = sys.argv[1]
+    auto_mode = "--auto" in sys.argv
 
     try:
         calibrator = BallCalibrator(port)
-        calibrator.interactive_calibrate()
+        if auto_mode:
+            calibrator.auto_sun_calibrate()
+        else:
+            calibrator.interactive_calibrate()
     except serial.SerialException as e:
         print(f"{Fore.RED}Serial error: {e}{Style.RESET_ALL}")
         print(f"Make sure the ESP32 is connected to {port} and nothing else is using it.")

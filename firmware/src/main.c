@@ -23,6 +23,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "nvs_flash.h"
+#include "driver/gpio.h"
 #include "sdkconfig.h"
 
 #include "config.h"
@@ -65,13 +66,7 @@ void app_main(void) {
     }
 
     /* Check if calibration is valid */
-    int has_calibration = 0;
-    for (int i = 0; i < SENSOR_COUNT; i++) {
-        if (g_calib.baseline[i] > 0) {
-            has_calibration = 1;
-            break;
-        }
-    }
+    int has_calibration = calib_has_mapping() || calib_has_baseline();
 
     if (!has_calibration) {
         ESP_LOGW(TAG, "No calibration data found. Using default normalization.");
@@ -107,11 +102,15 @@ void app_main(void) {
         /* Get signal strength */
         rssi = modem_get_rssi();
 
+        /* Get actual Unix time from modem (corrected for timezone) */
+        uint32_t unix_ts = 0;
+        modem_get_unix_time(&unix_ts);
+
         /* Build and publish direction packet */
         direction_packet_t pkt;
         memset(&pkt, 0, sizeof(pkt));
         strncpy(pkt.id, BALL_ID, sizeof(pkt.id) - 1);
-        pkt.ts = (uint32_t)(esp_timer_get_time() / 1000000ULL);
+        pkt.ts = unix_ts;
         pkt.dx = direction.x;
         pkt.dy = direction.y;
         pkt.dz = direction.z;

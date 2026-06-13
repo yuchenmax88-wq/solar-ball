@@ -1,147 +1,211 @@
-# Solar Ball — Maximum-Power-Point Direction Sensor
+# Solar Ball — Directional Light Sensor for Solar Arrays
 
-A self-contained, self-powered directional light sensor for photovoltaic arrays.
-Measures the brightest direction in the sky using 80 phototransistors on a
-spherical surface, computes a direction vector, and transmits it via 4G MQTT.
+[![Tests](https://github.com/opencode-solar/solar-ball/actions/workflows/test.yml/badge.svg)](https://github.com/opencode-solar/solar-ball/actions/workflows/test.yml)
+[![Firmware Build](https://github.com/opencode-solar/solar-ball/actions/workflows/firmware.yml/badge.svg)](https://github.com/opencode-solar/solar-ball/actions/workflows/firmware.yml)
+
+A self-contained, self-powered directional light sensor that tells solar arrays where the sun is. Uses 80 phototransistors embedded on a 100mm sphere to measure the brightest sky direction, computes a unit vector, and transmits it via 4G MQTT to a central computer that adjusts solar panel orientation.
 
 ## How It Works
 
 ```
-                    ┌─────────────────┐
-  Sky light ───────►│  80 ALS-PT19    │
-     ↓              │  on ball surface │
-                    └────────┬────────┘
-                             │
-                    ┌────────v────────┐
-                    │  5× CD74HC4067  │
-                    │  MUX (80→5)     │
-                    └────────┬────────┘
-                             │
-                    ┌────────v────────┐
-                    │  2× ADS1115     │
-                    │  16-bit ADC     │
-                    └────────┬────────┘
-                             │ I2C
-                    ┌────────v────────┐
-                    │  ESP32 MCU      │
-                    │  Weighted       │
-                    │  centroid       │
-                    │  algorithm      │
-                    └────────┬────────┘
-                             │ UART
-                    ┌────────v────────┐
-                    │  SIM7600G 4G    │
-                    │  MQTT publish   │
-                    └────────┬────────┘
-                             │ 4G / IoT SIM
-                    ┌────────v────────┐
-                    │  Central        │
-                    │  Computer        │
-                    │  (array tracking)│
-                    └─────────────────┘
+                ┌─────────────────┐
+ Sky light ────→│  80 ALS-PT19    │
+     ↓          │  on sphere      │
+                └────────┬────────┘
+                         │
+                ┌────────v────────┐
+                │  5× CD74HC4067  │  analog multiplexers
+                │  (80 ch → 5 ch) │
+                └────────┬────────┘
+                         │
+                ┌────────v────────┐
+                │  2× ADS1115     │  16-bit I2C ADC
+                └────────┬────────┘
+                         │ I2C
+                ┌────────v────────┐
+                │  ESP32 MCU      │  weighted centroid
+                │  direction algo │  algorithm
+                └────────┬────────┘
+                         │ UART
+                ┌────────v────────┐
+                │  SIM7600G 4G    │  MQTT over AT
+                └────────┬────────┘
+                         │ 4G
+                ┌────────v────────┐
+                │  MQTT Broker    │  /solar/ball/{id}/direction
+                └────────┬────────┘
+                         │
+                ┌────────v────────┐
+                │  Array Tracker  │  adjusts panel orientation
+                └─────────────────┘
 ```
 
-## Key Specifications
+## Specifications
 
 | Parameter | Value |
 |-----------|-------|
 | Sensors | 80 × ALS-PT19 phototransistors |
-| Effective resolution | ~5° (interpolated from ~12° sensor spacing) |
+| Sphere | 100mm diameter, Fibonacci lattice layout |
+| Direction accuracy | 0.3–0.5° (with calibration), 3–5° (without) |
 | Update interval | 5 seconds |
-| Communication | 4G Cat-4 (SIM7600G) + MQTT |
-| Self-powered | 5W solar panel + 18650 battery |
-| Battery life | ~3 days (no sun), indefinite (sunny) |
-| Range | Anywhere with 4G coverage (>95% of China plains) |
-| Ball diameter | 100mm |
-| Mounting | Fixed pole, independent of solar array |
+| Communication | SIM7600G 4G Cat-4, MQTT QoS 1 |
+| Power | 5W flexible solar panel + 18650 Li-ion (2000 mAh) |
+| Battery life | ~3 days without sun, indefinite with partial sun |
+| BOM cost | ~¥372 (~$50 USD) |
+| Mounting | Fixed pole, independent of array mechanics |
+| MCU | ESP32-WROOM-32 (ESP-IDF / PlatformIO) |
+| Weight | ~300g (estimated, without pole) |
+
+## Energy Efficiency Gain
+
+Dual-axis tracking vs fixed-tilt panels:
+
+| Region | Latitude | Annual Gain |
+|--------|:--------:|:-----------:|
+| Beijing | 40°N | +35–40% |
+| Shanghai | 31°N | +30–35% |
+| Shenzhen | 22°N | +25–30% |
+
+Winter gains are higher (50–100%) since the sun stays low; summer gains are 15–25%. With the Solar Ball's 0.3–0.5° tracking accuracy, misalignment losses are under 0.005%.
 
 ## Project Structure
 
 ```
 solar-ball/
-├── README.md                     ← This file
+├── README.md
 ├── hardware/
-│   ├── BOM.md                    ← Bill of materials (~¥372)
-│   ├── schematic.md              ← Circuit schematic + GPIO map
-│   └── ball_design.md            ← 3D printed shell design guide
+│   ├── BOM.md                       Bill of materials
+│   ├── schematic.md                 Circuit schematic + GPIO map
+│   └── ball_design.md               3D printed shell design
 ├── firmware/
-│   ├── platformio.ini            ← ESP32 build config (PlatformIO)
+│   ├── platformio.ini               PlatformIO build config
+│   ├── CMakeLists.txt               ESP-IDF CMake build
 │   ├── include/
-│   │   ├── config.h              ← Pin mappings, MQTT broker, etc.
-│   │   ├── sensor_positions.h    ← 80 sensor unit vectors (auto-generated)
-│   │   ├── sensor_calib.h        ← Calibration data structures
-│   │   └── mqtt_protocol.h       ← MQTT wire format definition
+│   │   ├── config.h                 Pin mappings, broker, APN
+│   │   ├── sensor_positions.h       80 Fibonacci unit vectors
+│   │   ├── sensor_calib.h           Calibration data structures
+│   │   └── mqtt_protocol.h          MQTT wire format
 │   ├── src/
-│   │   ├── main.c                ← Startup → scan → publish → sleep
-│   │   ├── sensor_scan.c/.h      ← MUX + ADC driver, 80-channel scan
-│   │   ├── direction.c/.h        ← Weighted centroid algorithm
-│   │   ├── mqtt_4g.c/.h          ← SIM7600G driver + MQTT AT commands
-│   │   ├── power.c/.h            ← Battery monitoring + deep sleep
-│   │   └── calibrate.c/.h        ← NVS storage + auto-calibration mode
+│   │   ├── main.c                   Boot → scan → compute → publish → sleep
+│   │   ├── sensor_scan.c/.h         80-ch MUX + ADS1115 ADC driver
+│   │   ├── direction.c/.h           Weighted centroid algorithm
+│   │   ├── mqtt_4g.c/.h             SIM7600G AT command MQTT driver
+│   │   ├── power.c/.h               Battery ADC + deep sleep
+│   │   ├── calibrate.c/.h           NVS storage + auto-calibration
+│   │   └── sun_calc.c/.h            NOAA solar ephemeris
 │   └── scripts/
-│       └── generate_sensor_coords.py  ← Generates Fibonacci sphere positions
+│       └── generate_sensor_coords.py Fibonacci sphere coordinate generator
 ├── tools/
-│   ├── auto_calibrate.py         ← PC tool: sequential illumination mapping
+│   ├── auto_calibrate.py            Calibration tool (manual + auto modes)
 │   └── requirements.txt
+├── tests/
+│   ├── test_direction.py            Direction algorithm tests
+│   ├── test_mqtt_protocol.py        Serialization tests
+│   ├── test_power.py                Battery SOC tests
+│   ├── test_calibration.py          Mapping inversion tests
+│   ├── test_autocal_validation.py   Auto-cal accuracy validation
+│   ├── test_autocal_e2e.py          End-to-end pipeline tests
+│   ├── simulate.py                  Desktop simulator
+│   └── run_all.py                   Test runner
 └── docs/
-    ├── assembly_guide.md          ← Step-by-step build instructions
-    └── calibration_procedure.md   ← How to run auto-calibration
+    ├── assembly_guide.md            Build instructions
+    └── calibration_procedure.md     Calibration guide
 ```
 
 ## Quick Start
 
-### 1. Generate sensor positions
+### Generate sensor coordinates
 
-```
+```bash
 cd firmware/scripts
 python generate_sensor_coords.py
 ```
 
-### 2. Build firmware
+### Build firmware
 
-```
+```bash
 cd firmware
 platformio run
 ```
 
-### 3. Flash to ESP32
+### Flash to ESP32
 
-```
+```bash
 platformio run --target upload
 ```
 
-### 4. Run auto-calibration (after assembly)
+### Run tests
 
+```bash
+cd tests
+python run_all.py
 ```
-cd tools
-pip install -r requirements.txt
-python auto_calibrate.py COM3
+
+## Calibration
+
+Two methods are supported:
+
+### Method 1: Sun Auto-Calibration (Recommended)
+
+```bash
+python tools/auto_calibrate.py COM3 --auto
 ```
 
-### 5. Deploy
+Place the ball outdoors under clear sky. The system will:
+1. Get GPS location from the 4G module (cell tower positioning)
+2. Sync time via NTP
+3. Compute the sun's exact direction from solar ephemeris
+4. Scan all 80 sensors once
+5. Automatically map each physical channel to its position on the sphere
+6. Save the calibration to NVS flash
 
-Hold BOOT button while powering on to enter calibration mode.
-Release BOOT button for normal operation.
+No manual steps required. One scan is sufficient.
 
-## MQTT Data Format
+### Method 2: Manual Flashlight Calibration
 
-Published every 5 seconds to topic `/solar/ball/{id}/direction`:
+```bash
+python tools/auto_calibrate.py COM3
+```
+
+Hold the BOOT button during power-on, then follow the prompts to shine a flashlight at each of the 80 numbered holes (one at a time).
+
+## MQTT Protocol
+
+Published every 5 seconds to `/solar/ball/{id}/direction`:
 
 ```json
 {
-  "id":  "ball-001",
-  "ts":  1718000000,
-  "dx":  0.3215,
-  "dy":  -0.1478,
-  "dz":  0.9352,
-  "soc": 87,
+  "id":   "ball-001",
+  "ts":   1718000000,
+  "dx":   0.3215,
+  "dy":   -0.1478,
+  "dz":   0.9352,
+  "soc":  87,
   "rssi": -89
 }
 ```
 
-- `dx, dy, dz`: Unit vector pointing toward brightest sky direction
-- `soc`: Battery charge (0-100%)
-- `rssi`: 4G signal strength (dBm)
+| Field | Type | Description |
+|-------|------|-------------|
+| `id`   | string | Ball identifier |
+| `ts`   | uint32 | Unix timestamp (seconds) |
+| `dx,dy,dz` | float | Unit vector toward brightest sky direction |
+| `soc`  | uint8  | Battery state of charge (0–100%) |
+| `rssi` | int8   | 4G signal strength (dBm) |
 
-The central computer receives this and calculates array orientation
-(zero mechanical delay since ball is independent of the array).
+The direction vector always has unit length. The central computer uses it to compute the solar
+array's optimal orientation independently per ball.
+
+## Key Design Decisions
+
+**Why a ball shape?** A sphere naturally provides hemispherical coverage with symmetric cosine response. The 80 ALS-PT19 phototransistors are placed on a Fibonacci sphere lattice, giving near-uniform angular distribution (~12° spacing). The bottom 30° has no sensors (the sun is never below ground).
+
+**Why 80 sensors?** Each sensor contributes a weighted vote to the direction vector. With 80 sensors, the 3-sensor minimum for valid results is easily met even under heavy cloud cover. More sensors would increase cost and complexity linearly but only improve accuracy by sqrt(N).
+
+**Why 4G instead of WiFi/LoRa?** 4G provides global coverage, works at km distances, and the SIM7600G module handles TCP/MQTT natively via AT commands — simplifying firmware. The IoT SIM costs ~¥60/year.
+
+**Why auto-calibration with the sun?** Hand-wiring 80 sensors to 80 physical PCB channels inevitably results in scrambled mapping. Traditional calibration requires 80 manual flashlight alignments. By using the sun as a known light source (via solar ephemeris), one outdoor scan is sufficient with direction accuracy of 0.3–0.5°.
+
+## License
+
+MIT

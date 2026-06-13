@@ -6,6 +6,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include <string.h>
+#include <stdbool.h>
 
 static const char *TAG = "sensor_scan";
 
@@ -45,13 +46,13 @@ static uint16_t ads1115_read_single(i2c_port_t i2c_num, uint8_t addr, int channe
     uint8_t data[2];
     uint16_t raw;
 
-    /* Config: continuous conversion, +/-4.096V, 128 SPS, single-shot on channel */
+    /* Config: single-shot, +/-4.096V PGA, 128 SPS */
     uint16_t config = 0;
     config |= (1 << 15);            /* OS: Start single conversion */
     config |= (channel & 3) << 12;  /* MUX: AINp = AIN(channel), AINn = GND */
-    config |= (0 << 9);             /* PGA: +/-6.144V */
+    config |= (1 << 9);             /* PGA: 001 = +/-4.096V (matches 3.3V circuit) */
     config |= (1 << 8);             /* MODE: 1 = Power-down single-shot mode */
-    config |= (4 << 5);             /* DR: 4 = 1600 SPS */
+    config |= (4 << 5);             /* DR: 4 = 128 SPS (7.8ms/conversion) */
     config |= (3 << 0);             /* COMP_QUE: 11 = disable comparator */
 
     config_reg[0] = (config >> 8) & 0xFF;
@@ -69,8 +70,8 @@ static uint16_t ads1115_read_single(i2c_port_t i2c_num, uint8_t addr, int channe
         return 0;
     }
 
-    /* Wait for conversion to complete (at 1600 SPS, max 625us, we wait 5ms for safety) */
-    vTaskDelay(pdMS_TO_TICKS(5));
+    /* Wait for conversion to complete (at 128 SPS, ~7.8ms; wait 10ms for safety) */
+    vTaskDelay(pdMS_TO_TICKS(10));
 
     /* Read conversion result */
     cmd = i2c_cmd_link_create();
@@ -92,7 +93,14 @@ static uint16_t ads1115_read_single(i2c_port_t i2c_num, uint8_t addr, int channe
     return raw;
 }
 
+static bool s_scan_initialized = false;
+
 void sensor_scan_init(void) {
+    if (s_scan_initialized) {
+        return;
+    }
+    s_scan_initialized = true;
+
     /* Configure MUX address select lines as outputs */
     for (int i = 0; i < 4; i++) {
         gpio_set_direction(mux_sel_pins[i], GPIO_MODE_OUTPUT);
@@ -185,18 +193,29 @@ int sensor_scan_all(float out[SENSOR_COUNT]) {
         return -1;
     }
 
-    /* Normalize using calibration baselines and apply channel mapping */
+    /*
+     * Normalize using calibration baselines and apply channel mapping.
+     *
+     * IMPORTANT: ALS-PT19 is wired common-emitter (3.3V → 10kΩ → collector → MUX).
+     * Bright light → more photocurrent → lower collector voltage → lower ADC reading.
+     * So we INVERT: bright sensor (low raw) → high normalized weight.
+     */
     for (int physical = 0; physical < SENSOR_COUNT; physical++) {
         uint16_t raw_avg = raw_sum[physical] / SENSOR_OVERSAMPLE;
         uint8_t position_idx = g_channel_to_position[physical];
 
+        if (position_idx >= SENSOR_COUNT) {
+            continue;  /* unmapped channel, skip */
+        }
+
         if (g_calib.baseline[physical] > 0) {
-            float normalized = (float)raw_avg / (float)g_calib.baseline[physical];
+            float normalized = 1.0f - (float)raw_avg / (float)g_calib.baseline[physical];
+            if (normalized < 0.0f) normalized = 0.0f;
             if (normalized > 1.0f) normalized = 1.0f;
             out[position_idx] = normalized;
         } else {
-            /* No calibration data: use raw value / max_raw */
-            out[position_idx] = (float)raw_avg / (float)(max_raw > 0 ? max_raw : 1);
+            /* No calibration data: invert raw / max_raw so bright = high weight */
+            out[position_idx] = 1.0f - (float)raw_avg / (float)(max_raw > 0 ? max_raw : 1);
         }
     }
 

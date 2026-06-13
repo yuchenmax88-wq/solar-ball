@@ -6,6 +6,7 @@ idf_component_register(
         ../src/mqtt_4g.c
         ../src/power.c
         ../src/calibrate.c
+        ../src/sun_calc.c
     INCLUDE_DIRS
         ../include
     REQUIRES

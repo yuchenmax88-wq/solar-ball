@@ -2,8 +2,6 @@
 #include "config.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
-#include "esp_adc/adc_cali_scheme.h"
-#include "esp_sleep.h"
 #include "esp_log.h"
 #include <math.h>
 
@@ -28,7 +26,15 @@ void power_init(void) {
     };
     adc_oneshot_config_channel(adc_handle, ADC_CHANNEL, &chan_cfg);
 
-    esp_err_t ret = adc_cali_create_scheme_lin(adc_handle, ADC_CHANNEL, &adc_cali_handle);
+    adc_cali_line_fitting_config_t cali_config = {
+        .unit_id = ADC_UNIT_1,
+        .atten = ADC_ATTEN_DB_11,
+        .bitwidth = ADC_BITWIDTH_12,
+    };
+    esp_err_t ret = adc_cali_create_scheme_line_fitting(&cali_config, &adc_cali_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "ADC calibration scheme creation failed, using raw readings");
+    }
     adc_cali_done = (ret == ESP_OK);
 
     ESP_LOGI(TAG, "Power management initialized");

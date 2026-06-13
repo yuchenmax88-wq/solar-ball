@@ -19,7 +19,7 @@
 /* Per-sensor calibration data stored in NVS */
 typedef struct {
     uint16_t baseline[SENSOR_COUNT];   /* baseline raw ADC values */
-    uint8_t  channel_map[SENSOR_COUNT];/* physical channel -> position index */
+    uint8_t  channel_map[SENSOR_COUNT];/* position index -> physical channel */
 } calib_data_t;
 
 /* Wall clock time source (set via 4G NTP or manual) */
