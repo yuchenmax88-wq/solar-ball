@@ -98,6 +98,7 @@ solar-ball/
 │       └── generate_sensor_coords.py  Fibonacci sphere coordinate generator
 ├── tools/
 │   ├── auto_calibrate.py            Calibration tool (manual + auto modes)
+│   ├── mqtt_receiver.py             MQTT subscriber → azimuth/elevation
 │   └── requirements.txt
 ├── tests/
 │   ├── test_direction.py            Direction algorithm tests
@@ -196,6 +197,30 @@ Published every 5 seconds to `/solar/ball/{id}/direction`:
 
 The direction vector always has unit length. The central computer uses it to compute the solar
 array's optimal orientation independently per ball.
+
+## Receiver / Array Tracking
+
+Use `tools/mqtt_receiver.py` to receive direction vectors and convert them to
+solar panel azimuth and tilt angles:
+
+```bash
+pip install -r tools/requirements.txt
+python tools/mqtt_receiver.py                     # default broker, ball-001
+python tools/mqtt_receiver.py --ball ball-002     # listen for a specific ball
+python tools/mqtt_receiver.py --broker 192.168.1.1  # custom MQTT broker
+```
+
+Output:
+```
+[ball-001] Sun: az= 169.2° elev=+73.0°  Panel: az= 169.2° tilt=17.0°  SOC=87%
+```
+
+The receiver:
+1. Subscribes to `/solar/ball/{id}/direction` on the MQTT broker
+2. Parses the JSON payload
+3. Converts `(dx, dy, dz)` unit vector → azimuth + elevation
+4. Computes panel orientation: `panel_az = sun_az`, `panel_tilt = 90° - elev`
+5. Feed `panel_az` and `panel_tilt` to your solar array motor controller
 
 ## Key Design Decisions
 
