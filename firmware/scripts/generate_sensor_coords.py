@@ -42,7 +42,7 @@ def main():
     # Sort by z descending (top to bottom)
     filtered.sort(key=lambda p: -p[2])
 
-    out_path = os.path.join(os.path.dirname(__file__), '..', 'include', 'sensor_positions.h')
+    out_path = os.path.join(os.path.dirname(__file__), '..', 'main', 'sensor_positions.h')
     with open(out_path, 'w') as f:
         f.write("""#ifndef SENSOR_POSITIONS_H
 #define SENSOR_POSITIONS_H
