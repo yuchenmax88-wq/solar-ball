@@ -9,7 +9,7 @@ A self-contained, self-powered directional light sensor that tells solar arrays 
 80 phototransistors on a 100mm sphere → weighted centroid → direction vector → 4G MQTT → array tracking.  
 **BOM ~¥372 / ~$50. Direction accuracy 0.3–0.5° (calibrated).**
 
-> 📖 **新手入门？** 直接看 [操作手册 (Operation Manual)](docs/operation_manual.md) — 从零件采购到日常运行的完整指南。
+> 📖 **新手入门？** 直接看[操作手册 (中文)](docs/operation_manual.md) 或 [Operation Manual (English)](docs/operation_manual_en.md) — 从零件采购到日常运行的完整指南。
 
 ## Data Flow
 
@@ -137,7 +137,8 @@ solar-ball/
 │   ├── ball_design.md              3D shell + sensor placement design
 │   └── dust_protection.md          Replaceable PTFE sock + vibration cleaning
 ├── docs/
-│   ├── operation_manual.md           **START HERE** — complete beginner guide
+│   ├── operation_manual.md           **START HERE** — complete beginner guide (中文)
+│   ├── operation_manual_en.md        Operation Manual (English)
 │   ├── assembly_guide.md             Step-by-step build instructions
 │   └── calibration_procedure.md      Auto + manual calibration guide
 ├── .github/workflows/
