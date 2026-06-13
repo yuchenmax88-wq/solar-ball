@@ -1,18 +1,17 @@
 /*
- * Solar Ball Firmware v1.0
+ * Solar Ball Firmware v1.1
  * ========================
  *
  * Main entry point. Flow:
- *   1. Boot
- *   2. Initialize peripherals (I2C, GPIO, ADC)
- *   3. Load calibration from NVS
- *   4. Scan all 80 sensors
- *   5. Compute brightest direction vector
+ *   1. Boot, initialize peripherals, load calibration
+ *   2. Scan all 80 sensors + acquire raw values for diagnostics
+ *   3. Analyze sensor faults, weather conditions, compute confidence
+ *   4. Compute brightest direction vector
+ *   5. Update display with status
  *   6. Initialize 4G module and publish via MQTT
  *   7. Enter deep sleep
  *
- * On first boot (no calibration), or if GPIO 0 (BOOT) is held during startup,
- * enters auto-calibration mode via UART.
+ * On BOOT button hold during startup: enters calibration mode via UART.
  */
 
 #include <stdio.h>
@@ -30,83 +29,118 @@
 #include "sensor_positions.h"
 #include "sensor_calib.h"
 #include "sensor_scan.h"
+#include "sensor_diag.h"
 #include "direction.h"
 #include "mqtt_4g.h"
 #include "power.h"
 #include "calibrate.h"
+#include "display.h"
+#include "remote_diag.h"
 
 static const char *TAG = "solar-ball";
 
-/* Check if BOOT button is held to enter calibration mode */
 static int is_calibration_mode(void) {
-    /* GPIO 0 (BOOT button) is pulled up; LOW when pressed */
     gpio_set_direction(GPIO_NUM_0, GPIO_MODE_INPUT);
     gpio_set_pull_mode(GPIO_NUM_0, GPIO_PULLUP_ONLY);
     vTaskDelay(pdMS_TO_TICKS(50));
-    int level = gpio_get_level(GPIO_NUM_0);
-    return (level == 0);  /* LOW = button held */
+    return (gpio_get_level(GPIO_NUM_0) == 0);
 }
 
 void app_main(void) {
     ESP_LOGI(TAG, "Solar Ball v%s booting...", FIRMWARE_VERSION);
     ESP_LOGI(TAG, "Ball ID: %s", BALL_ID);
 
-    /* Initialize power monitoring */
+    /* ---- Init ---- */
     power_init();
-
-    /* Load calibration data from NVS */
     calib_load();
+    remote_diag_init();
+    display_init();
 
-    /* Check if we should enter calibration mode */
+    /* ---- Calibration mode check ---- */
     if (is_calibration_mode()) {
         ESP_LOGI(TAG, "BOOT button held - entering calibration mode");
+        display_show_calib("Calibration mode", 0, 1);
         sensor_scan_init();
         calib_run_auto();
+        display_show_calib("Done", 1, 1);
         ESP_LOGI(TAG, "Calibration complete, proceeding to normal operation");
     }
 
-    /* Check if calibration is valid */
     int has_calibration = calib_has_mapping() || calib_has_baseline();
-
     if (!has_calibration) {
         ESP_LOGW(TAG, "No calibration data found. Using default normalization.");
-        ESP_LOGW(TAG, "Hold BOOT button at startup to run auto-calibration.");
     }
 
-    /* Initialize sensor scanning */
+    /* ---- Sensor scan ---- */
     sensor_scan_init();
-
-    /* Scan sensors */
     float sensor_values[SENSOR_COUNT];
     int scan_ok = sensor_scan_all(sensor_values);
-    if (scan_ok != 0) {
-        ESP_LOGW(TAG, "Sensor scan returned errors, continuing anyway");
-    }
 
-    /* Compute direction vector */
+    /* Collect raw values for diagnostics (re-scan raw, single pass) */
+    sensor_diag_result_t diag;
+    memset(&diag, 0, sizeof(diag));
+    diag.max_raw = 0;
+    diag.min_raw = 0xFFFF;
+    float variance_sum = 0.0f;
+    float variance_mean = 0.0f;
+
+    for (int phys = 0; phys < SENSOR_COUNT; phys++) {
+        int bank = phys / MUX_CHANNELS_PER_BANK;
+        int ch = phys % MUX_CHANNELS_PER_BANK;
+        uint16_t raw = sensor_read_raw(bank, ch);
+        diag.raw_values[phys] = raw;
+        if (raw > diag.max_raw) diag.max_raw = raw;
+        if (raw < diag.min_raw) diag.min_raw = raw;
+        variance_mean += (float)raw;
+    }
+    variance_mean /= SENSOR_COUNT;
+
+    for (int phys = 0; phys < SENSOR_COUNT; phys++) {
+        float diff = (float)diag.raw_values[phys] - variance_mean;
+        variance_sum += diff * diff;
+    }
+    diag.variance = variance_sum / SENSOR_COUNT;
+
+    if (scan_ok != 0) {
+        diag.adc_errors = 1;
+    }
+    remote_diag_record_scan();
+
+    /* ---- Sensor diagnostics ---- */
+    uint16_t error_mask = FAULT_NONE;
+    uint8_t confidence = 255;
+    uint8_t flags = 0;
+    sensor_diag_analyze(&diag, &error_mask, &confidence, &flags);
+
+    /* ---- Direction computation ---- */
     vec3_t direction;
     int direction_ok = direction_compute(sensor_values, &direction);
 
-    /* Read battery status */
+    /* If overcast or night, force direction to (0,0,1) with low confidence */
+    if ((flags & FLAG_OVERCAST) || (flags & FLAG_NIGHT)) {
+        direction.x = 0.0f;
+        direction.y = 0.0f;
+        direction.z = 1.0f;
+        direction_ok = -1;
+    }
+
+    /* ---- Battery ---- */
     uint32_t battery_mv = power_get_millivolts();
     uint8_t soc = power_get_soc();
+    if (soc < 10) {
+        error_mask |= FAULT_LOW_BATTERY;
+    }
 
-    /* Initialize 4G and publish */
+    /* ---- 4G and MQTT ---- */
     int16_t rssi = -999;
     int publish_ok = -1;
+    uint32_t unix_ts = 0;
 
     if (modem_init() == 0) {
-        /* Sync time (best-effort) */
         modem_sync_time();
-
-        /* Get signal strength */
         rssi = modem_get_rssi();
-
-        /* Get actual Unix time from modem (corrected for timezone) */
-        uint32_t unix_ts = 0;
         modem_get_unix_time(&unix_ts);
 
-        /* Build and publish direction packet */
         direction_packet_t pkt;
         memset(&pkt, 0, sizeof(pkt));
         strncpy(pkt.id, BALL_ID, sizeof(pkt.id) - 1);
@@ -116,24 +150,39 @@ void app_main(void) {
         pkt.dz = direction.z;
         pkt.soc = soc;
         pkt.rssi = rssi;
+        pkt.error_mask = error_mask;
+        pkt.confidence = confidence;
+        pkt.flags = flags;
 
         publish_ok = mqtt_publish_direction(&pkt);
-
-        /* Power off modem */
+        if (publish_ok < 0) {
+            error_mask |= FAULT_MQTT_ERROR;
+        }
         modem_power_off();
     } else {
         ESP_LOGE(TAG, "4G modem initialization failed");
+        error_mask |= FAULT_MODEM_ERROR;
     }
 
-    /* Log summary */
-    ESP_LOGI(TAG, "=== Solar Ball Report ===");
-    ESP_LOGI(TAG, "Direction: (%.4f, %.4f, %.4f)  valid=%d",
-             direction.x, direction.y, direction.z, direction_ok == 0);
-    ESP_LOGI(TAG, "Battery: %umV (%u%%)", battery_mv, soc);
-    ESP_LOGI(TAG, "4G RSSI: %d dBm  Published: %s",
-             rssi, publish_ok > 0 ? "YES" : "NO");
+    /* ---- Record stats ---- */
+    remote_diag_record_publish(publish_ok > 0 ? 1 : 0);
 
-    /* Enter deep sleep */
+    /* ---- Display update ---- */
+    display_show_status(direction.x, direction.y, direction.z,
+                        soc, rssi, error_mask, confidence);
+    vTaskDelay(pdMS_TO_TICKS(2000));  /* give user time to read */
+    display_sleep();
+
+    /* ---- Log summary ---- */
+    ESP_LOGI(TAG, "=== Solar Ball Report ===");
+    ESP_LOGI(TAG, "Direction: (%.4f, %.4f, %.4f)  valid=%d  conf=%u",
+             direction.x, direction.y, direction.z, direction_ok == 0, confidence);
+    ESP_LOGI(TAG, "Battery: %umV (%u%%)  RSSI: %d dBm",
+             battery_mv, soc, rssi);
+    ESP_LOGI(TAG, "Faults: 0x%04X  Flags: 0x%02X  Published: %s",
+             error_mask, flags, publish_ok > 0 ? "YES" : "NO");
+
+    /* ---- Sleep ---- */
     ESP_LOGI(TAG, "Cycle complete. Sleeping for %d seconds.", DEEP_SLEEP_WAKEUP_S);
     vTaskDelay(pdMS_TO_TICKS(100));
     power_deep_sleep();

@@ -7,6 +7,9 @@ idf_component_register(
         power.c
         calibrate.c
         sun_calc.c
+        display.c
+        sensor_diag.c
+        remote_diag.c
     INCLUDE_DIRS
         .
     REQUIRES
