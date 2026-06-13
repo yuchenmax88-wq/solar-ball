@@ -2,42 +2,33 @@
 
 [![Tests](https://github.com/yuchenmax88-wq/solar-ball/actions/workflows/test.yml/badge.svg)](https://github.com/yuchenmax88-wq/solar-ball/actions/workflows/test.yml)
 [![Firmware Build](https://github.com/yuchenmax88-wq/solar-ball/actions/workflows/firmware.yml/badge.svg)](https://github.com/yuchenmax88-wq/solar-ball/actions/workflows/firmware.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.1.0-green)](firmware/main/config.h)
 
-A self-contained, self-powered directional light sensor that tells solar arrays where the sun is. Uses 80 phototransistors embedded on a 100mm sphere to measure the brightest sky direction, computes a unit vector, and transmits it via 4G MQTT to a central computer that adjusts solar panel orientation.
+A self-contained, self-powered directional light sensor that tells solar arrays where the sun is.  
+80 phototransistors on a 100mm sphere → weighted centroid → direction vector → 4G MQTT → array tracking.  
+**BOM ~¥372 / ~$50. Direction accuracy 0.3–0.5° (calibrated).**
 
-## How It Works
+## Data Flow
 
 ```
-                ┌─────────────────┐
- Sky light ────→│  80 ALS-PT19    │
-     ↓          │  on sphere      │
-                └────────┬────────┘
-                         │
-                ┌────────v────────┐
-                │  5× CD74HC4067  │  analog multiplexers
-                │  (80 ch → 5 ch) │
-                └────────┬────────┘
-                         │
-                ┌────────v────────┐
-                │  2× ADS1115     │  16-bit I2C ADC
-                └────────┬────────┘
-                         │ I2C
-                ┌────────v────────┐
-                │  ESP32 MCU      │  weighted centroid
-                │  direction algo │  algorithm
-                └────────┬────────┘
-                         │ UART
-                ┌────────v────────┐
-                │  SIM7600G 4G    │  MQTT over AT
-                └────────┬────────┘
-                         │ 4G
-                ┌────────v────────┐
-                │  MQTT Broker    │  /solar/ball/{id}/direction
-                └────────┬────────┘
-                         │
-                ┌────────v────────┐
-                │  Array Tracker  │  adjusts panel orientation
-                └─────────────────┘
+  Sky light → 80×ALS-PT19 → 5×MUX → 2×ADS1115 ADC → ESP32
+                                                         │
+                                              ┌──────────┤
+                                              ▼          ▼
+                                     direction.c    sensor_diag.c
+                                     (dx,dy,dz)    (faults,weather,confidence)
+                                              │          │
+                                              ▼          ▼
+                                       display.c    mqtt_4g.c
+                                       (OLED)       (JSON via 4G)
+                                                         │
+                                              ┌──────────┤
+                                              ▼          ▼
+                                        MQTT Broker   mqtt_receiver.py
+                                              │       (az,elev,panel angles)
+                                              ▼
+                                        Array Motor Controller
 ```
 
 ## Specifications
@@ -45,107 +36,136 @@ A self-contained, self-powered directional light sensor that tells solar arrays 
 | Parameter | Value |
 |-----------|-------|
 | Sensors | 80 × ALS-PT19 phototransistors |
-| Sphere | 100mm diameter, Fibonacci lattice layout |
-| Direction accuracy | 0.3–0.5° (with calibration), 3–5° (without) |
+| Sphere | 100mm diameter, Fibonacci lattice |
+| Direction accuracy | **0.3–0.5°** (auto-calibrated) |
 | Update interval | 5 seconds |
+| MCU | ESP32-WROOM-32 (ESP-IDF v5 / PlatformIO) |
 | Communication | SIM7600G 4G Cat-4, MQTT QoS 1 |
-| Power | 5W flexible solar panel + 18650 Li-ion (2000 mAh) |
-| Battery life | ~3 days without sun, indefinite with partial sun |
-| BOM cost | ~¥372 (~$50 USD) |
-| Mounting | Fixed pole, independent of array mechanics |
-| MCU | ESP32-WROOM-32 (ESP-IDF / PlatformIO) |
-| Weight | ~300g (estimated, without pole) |
+| Display | SSD1306 128×64 OLED (I2C, auto-sleep) |
+| Power | 5W solar panel + 18650 2000mAh |
+| BOM cost | **~¥372 (~$50)** |
+| Firmware | C, 9 modules, ~2000 lines |
+| Tests | 7 suites, **389 assertions**, all passing |
+
+## Features
+
+| Category | Feature | Status |
+|----------|---------|:------:|
+| **Core** | 80-sensor Fibonacci sphere scan + 8x oversampling | ✅ |
+| | Weighted centroid direction algorithm | ✅ |
+| | Self-powered (solar + Li-ion, 3-day battery) | ✅ |
+| | 4G MQTT publish every 5 seconds | ✅ |
+| **Calibration** | Sun auto-calibration (one outdoor scan, no manual steps) | ✅ |
+| | Manual flashlight calibration (80-step guided) | ✅ |
+| | Baseline normalization (uniform light reference) | ✅ |
+| | NVS persistent storage | ✅ |
+| **Diagnostics** | Sensor fault detection (open/short/saturated) | ✅ |
+| | Weather classification (clear / overcast / night) | ✅ |
+| | Direction confidence scoring (0–255) | ✅ |
+| | Remote diagnostic counters (scan/publish stats) | ✅ |
+| **Display** | SSD1306 OLED status screen (I2C, µA sleep) | ✅ |
+| | Shows direction, azimuth, elevation, SOC, RSSI, faults, confidence bar | ✅ |
+| **Safety** | Overcast/night → auto-point zenith, low confidence | ✅ |
+| | Low battery fault flag | ✅ |
+| | Modem/MQTT failure flags in payload | ✅ |
+| **Hardware** | Dust/sand protection design (replaceable PTFE sock) | ✅ |
+| | Piezo vibration cleaning (optional) | ✅ |
+| **Tooling** | PC calibration tool (serial UART, manual + auto modes) | ✅ |
+| | MQTT receiver (subscribe → vector → panel angles) | ✅ |
+| | Desktop simulator (full pipeline, noise modeling) | ✅ |
+| | CI/CD (GitHub Actions: Python tests + firmware build) | ✅ |
 
 ## Energy Efficiency Gain
 
 Dual-axis tracking vs fixed-tilt panels:
 
-| Region | Latitude | Annual Gain |
-|--------|:--------:|:-----------:|
-| Beijing | 40°N | +35–40% |
-| Shanghai | 31°N | +30–35% |
-| Shenzhen | 22°N | +25–30% |
+| Region | Latitude | Annual Gain | Winter Gain |
+|--------|:--------:|:-----------:|:-----------:|
+| Beijing | 40°N | +35–40% | +50–100% |
+| Shanghai | 31°N | +30–35% | +40–80% |
+| Shenzhen | 22°N | +25–30% | +30–50% |
 
-Winter gains are higher (50–100%) since the sun stays low; summer gains are 15–25%. With the Solar Ball's 0.3–0.5° tracking accuracy, misalignment losses are under 0.005%.
+Solar Ball tracking accuracy of 0.3–0.5° adds <0.005% misalignment loss.
 
 ## Project Structure
 
 ```
 solar-ball/
-├── README.md
-├── hardware/
-│   ├── BOM.md                       Bill of materials
-│   ├── schematic.md                 Circuit schematic + GPIO map
-│   └── ball_design.md               3D printed shell design
 ├── firmware/
-│   ├── platformio.ini               PlatformIO build config
-│   ├── CMakeLists.txt               ESP-IDF CMake build
-│   ├── sdkconfig.defaults            Kconfig defaults
-│   ├── main/
-│   │   ├── CMakeLists.txt            ESP-IDF component registration
-│   │   ├── config.h                  Pin mappings, broker, APN
-│   │   ├── sensor_positions.h        80 Fibonacci unit vectors
-│   │   ├── sensor_calib.h            Calibration data structures
-│   │   ├── mqtt_protocol.h           MQTT wire format
-│   │   ├── main.c                    Boot → scan → compute → publish → sleep
-│   │   ├── sensor_scan.c/.h          80-ch MUX + ADS1115 ADC driver
-│   │   ├── direction.c/.h            Weighted centroid algorithm
-│   │   ├── mqtt_4g.c/.h              SIM7600G AT command MQTT driver
-│   │   ├── power.c/.h                Battery ADC + deep sleep
-│   │   ├── calibrate.c/.h            NVS storage + auto-calibration
-│   │   └── sun_calc.c/.h             NOAA solar ephemeris
-│   └── scripts/
-│       └── generate_sensor_coords.py  Fibonacci sphere coordinate generator
+│   ├── platformio.ini              PlatformIO + ESP-IDF build config
+│   ├── CMakeLists.txt              Top-level CMake
+│   ├── sdkconfig.defaults          Kconfig defaults (4MB flash, I2C legacy)
+│   └── main/
+│       ├── CMakeLists.txt          Component registration (9 source files)
+│       ├── config.h                All pin mappings, broker, APN, timing
+│       ├── sensor_positions.h      80 Fibonacci unit vectors (auto-generated)
+│       ├── sensor_calib.h          Calibration data structures + state enum
+│       ├── mqtt_protocol.h         MQTT packet struct + JSON serialize (v1.1)
+│       ├── main.c                  Boot → scan → diag → compute → display → publish → sleep
+│       ├── sensor_scan.h/.c        80-ch MUX + ADS1115 I2C driver + normalization
+│       ├── sensor_diag.h/.c        Fault detection / weather / confidence
+│       ├── direction.h/.c          Weighted centroid algorithm
+│       ├── mqtt_4g.h/.c            SIM7600G AT commands (GPS, NTP, MQTT)
+│       ├── power.h/.c              Battery ADC + SOC + deep sleep
+│       ├── calibrate.h/.c          NVS + auto sun-cal + manual flashlight cal
+│       ├── sun_calc.h/.c           NOAA solar ephemeris (static)
+│       ├── display.h/.c            SSD1306 OLED I2C driver (5×7 font)
+│       ├── remote_diag.h/.c        Scan/publish counters
+│       └── scripts/
+│           └── generate_sensor_coords.py  Fibonacci sphere → C header
 ├── tools/
-│   ├── auto_calibrate.py            Calibration tool (manual + auto modes)
-│   ├── mqtt_receiver.py             MQTT subscriber → azimuth/elevation
-│   └── requirements.txt
+│   ├── auto_calibrate.py           Calibration tool (--auto for sun, default for flashlight)
+│   ├── mqtt_receiver.py            MQTT subscriber: (dx,dy,dz) → azimuth/elevation/panel angles
+│   └── requirements.txt            pyserial, colorama, paho-mqtt
 ├── tests/
-│   ├── test_direction.py            Direction algorithm tests
-│   ├── test_mqtt_protocol.py        Serialization tests
-│   ├── test_power.py                Battery SOC tests
-│   ├── test_calibration.py          Mapping inversion tests
-│   ├── test_autocal_validation.py   Auto-cal accuracy validation
-│   ├── test_autocal_e2e.py          End-to-end pipeline tests
-│   ├── simulate.py                  Desktop simulator
-│   └── run_all.py                   Test runner
-└── docs/
-    ├── assembly_guide.md            Build instructions
-    └── calibration_procedure.md     Calibration guide
+│   ├── run_all.py                  Test runner (7 suites)
+│   ├── test_direction.py           38 assertions — algorithm correctness
+│   ├── test_mqtt_protocol.py       25 assertions — JSON serialization
+│   ├── test_power.py               20 assertions — battery SOC calculation
+│   ├── test_calibration.py         246 assertions — channel mapping inversion
+│   ├── test_weather.py             25 assertions — overcast/night/fault classification
+│   ├── test_saturation.py          15 assertions — saturation detection
+│   ├── test_remote_diag.py         20 assertions — diagnostic protocol
+│   ├── test_autocal_validation.py  200-trial Monte Carlo — auto-cal accuracy
+│   ├── test_autocal_e2e.py         GPS→ephemeris→calibrate→direction pipeline
+│   └── simulate.py                 Desktop simulator (noise, accuracy sweep)
+├── hardware/
+│   ├── BOM.md                      ¥372 bill of materials
+│   ├── schematic.md                Full circuit + GPIO pin map
+│   ├── ball_design.md              3D shell + sensor placement design
+│   └── dust_protection.md          Replaceable PTFE sock + vibration cleaning
+├── docs/
+│   ├── assembly_guide.md           Step-by-step build instructions
+│   └── calibration_procedure.md    Auto + manual calibration guide
+├── .github/workflows/
+│   ├── test.yml                    Python tests on push
+│   └── firmware.yml                PlatformIO build on push
+├── LICENSE                         MIT
+└── README.md
 ```
 
 ## Quick Start
 
-### Generate sensor coordinates
-
 ```bash
-cd firmware/scripts
-python generate_sensor_coords.py
-```
+# Generate sensor coordinates
+cd firmware/scripts && python generate_sensor_coords.py
 
-### Build firmware
+# Build firmware
+cd firmware && platformio run
 
-```bash
-cd firmware
-platformio run
-```
-
-### Flash to ESP32
-
-```bash
+# Flash to ESP32
 platformio run --target upload
-```
 
-### Run tests
+# Run test suite (389 assertions, zero dependencies beyond Python 3)
+cd tests && python run_all.py
 
-```bash
-cd tests
-python run_all.py
+# Desktop simulation (no hardware needed)
+python tests/simulate.py                # random sun positions
+python tests/simulate.py --scan         # full sky sweep
+python tests/simulate.py --noiseless    # ideal sensor accuracy test
 ```
 
 ## Calibration
-
-Two methods are supported:
 
 ### Method 1: Sun Auto-Calibration (Recommended)
 
@@ -153,85 +173,122 @@ Two methods are supported:
 python tools/auto_calibrate.py COM3 --auto
 ```
 
-Place the ball outdoors under clear sky. The system will:
-1. Get GPS location from the 4G module (cell tower positioning)
-2. Sync time via NTP
-3. Compute the sun's exact direction from solar ephemeris
-4. Scan all 80 sensors once
-5. Automatically map each physical channel to its position on the sphere
-6. Save the calibration to NVS flash
+Place ball outdoors under clear sky. One scan. Fully automatic:
+GPS location → NTP time → solar ephemeris → scan → sort-and-map → NVS save.
 
-No manual steps required. One scan is sufficient.
+### Method 2: Baseline Normalization
 
-### Method 2: Manual Flashlight Calibration
+Enter calibration mode (hold BOOT button at power-on), then send:
+```
+CAL:BASELINE_START
+```
+Place ball in uniform diffuse light. 100 samples per sensor → stored as baseline reference.
+
+### Method 3: Manual Flashlight
 
 ```bash
 python tools/auto_calibrate.py COM3
 ```
+80-step guided process with a bright flashlight.
 
-Hold the BOOT button during power-on, then follow the prompts to shine a flashlight at each of the 80 numbered holes (one at a time).
-
-## MQTT Protocol
+## MQTT Protocol (v1.1)
 
 Published every 5 seconds to `/solar/ball/{id}/direction`:
 
 ```json
 {
-  "id":   "ball-001",
-  "ts":   1718000000,
-  "dx":   0.3215,
-  "dy":   -0.1478,
-  "dz":   0.9352,
-  "soc":  87,
-  "rssi": -89
+  "id":    "ball-001",
+  "ts":    1718000000,
+  "dx":    0.3215,
+  "dy":    -0.1478,
+  "dz":    0.9352,
+  "soc":   87,
+  "rssi":  -89,
+  "err":   0,
+  "conf":  220,
+  "flags": 15
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id`   | string | Ball identifier |
-| `ts`   | uint32 | Unix timestamp (seconds) |
-| `dx,dy,dz` | float | Unit vector toward brightest sky direction |
-| `soc`  | uint8  | Battery state of charge (0–100%) |
-| `rssi` | int8   | 4G signal strength (dBm) |
+| `id` | string | Ball identifier |
+| `ts` | uint32 | Unix timestamp (UTC, timezone-corrected) |
+| `dx,dy,dz` | float | Unit vector toward brightest sky (x=east, y=north, z=up) |
+| `soc` | uint8 | Battery 0–100% |
+| `rssi` | int16 | 4G signal (dBm, -999=unknown) |
+| `err` | uint16 | Fault bitmask (see below) |
+| `conf` | uint8 | Direction confidence 0–255 (255=perfect, <50=doubtful) |
+| `flags` | uint8 | Status flags (direction valid, overcast, night, calibrated, baseline) |
 
-The direction vector always has unit length. The central computer uses it to compute the solar
-array's optimal orientation independently per ball.
+### Fault Bitmask
 
-## Receiver / Array Tracking
+| Bit | Value | Meaning |
+|-----|-------|---------|
+| 0 | 0x0001 | Sensor open circuit |
+| 1 | 0x0002 | Sensor shorted |
+| 2 | 0x0004 | Sensor saturated |
+| 3 | 0x0008 | ADC I2C error |
+| 4 | 0x0010 | 4G modem failure |
+| 5 | 0x0020 | MQTT publish failure |
+| 6 | 0x0040 | Low battery |
+| 7 | 0x0080 | No calibration data |
+| 8 | 0x0100 | Overcast sky (uniform illumination) |
+| 9 | 0x0200 | Nighttime (no signal) |
 
-Use `tools/mqtt_receiver.py` to receive direction vectors and convert them to
-solar panel azimuth and tilt angles:
+## Receiver
 
 ```bash
 pip install -r tools/requirements.txt
 python tools/mqtt_receiver.py                     # default broker, ball-001
-python tools/mqtt_receiver.py --ball ball-002     # listen for a specific ball
-python tools/mqtt_receiver.py --broker 192.168.1.1  # custom MQTT broker
+python tools/mqtt_receiver.py --ball ball-002     # specific ball ID
+python tools/mqtt_receiver.py --broker 192.168.1.1  # custom broker
 ```
 
 Output:
 ```
-[ball-001] Sun: az= 169.2° elev=+73.0°  Panel: az= 169.2° tilt=17.0°  SOC=87%
+[ball-001] 14:32:05 Sun: az= 169.2° elev=+73.0°  Panel: az= 169.2° tilt=17.0°  SOC=87% RSSI=-89dBm conf=220
+  Faults: none  Flags: [DIR_OK CALIB ]  vector:OK
 ```
 
-The receiver:
-1. Subscribes to `/solar/ball/{id}/direction` on the MQTT broker
-2. Parses the JSON payload
-3. Converts `(dx, dy, dz)` unit vector → azimuth + elevation
-4. Computes panel orientation: `panel_az = sun_az`, `panel_tilt = 90° - elev`
-5. Feed `panel_az` and `panel_tilt` to your solar array motor controller
+The receiver decodes all v1.1 fields: timestamp, faults, confidence, flags — and outputs
+ready-to-use panel azimuth and tilt angles for motor controllers.
+
+## Test Suite
+
+```
+$ python tests/run_all.py
+============================================================
+  test_direction.py         — 38 passed    algorithm correctness
+  test_mqtt_protocol.py     — 25 passed    JSON serialization
+  test_power.py             — 20 passed    battery SOC interpolation
+  test_calibration.py       — 246 passed   channel mapping inversion
+  test_weather.py           — 25 passed    overcast/night/fault classification
+  test_saturation.py        — 15 passed    saturation threshold detection
+  test_remote_diag.py       — 20 passed    diagnostic protocol
+============================================================
+All tests passed!  (389 assertions, zero failures)
+```
+
+Additional validation scripts:
+- `test_autocal_validation.py` — 200-trial Monte Carlo, auto-cal achieves 0.3–0.5° mean error
+- `test_autocal_e2e.py` — Full GPS→ephemeris→calibrate→direction pipeline
+- `simulate.py` — Desktop simulator with noise modeling and accuracy sweep
 
 ## Key Design Decisions
 
-**Why a ball shape?** A sphere naturally provides hemispherical coverage with symmetric cosine response. The 80 ALS-PT19 phototransistors are placed on a Fibonacci sphere lattice, giving near-uniform angular distribution (~12° spacing). The bottom 30° has no sensors (the sun is never below ground).
+**Why a ball?** A sphere provides hemispherical coverage with symmetric cosine response. 80 ALS-PT19 phototransistors on a Fibonacci lattice give near-uniform ~12° spacing.
 
-**Why 80 sensors?** Each sensor contributes a weighted vote to the direction vector. With 80 sensors, the 3-sensor minimum for valid results is easily met even under heavy cloud cover. More sensors would increase cost and complexity linearly but only improve accuracy by sqrt(N).
+**Why 80 sensors?** Each sensor contributes a weighted vote. The 3-sensor minimum for valid results is easily met even under heavy cloud cover.
 
-**Why 4G instead of WiFi/LoRa?** 4G provides global coverage, works at km distances, and the SIM7600G module handles TCP/MQTT natively via AT commands — simplifying firmware. The IoT SIM costs ~¥60/year.
+**Why 4G instead of WiFi/LoRa?** 4G provides global coverage at km distances. The SIM7600G module handles TCP/MQTT natively via AT commands, simplifying firmware. IoT SIM ~¥60/year.
 
-**Why auto-calibration with the sun?** Hand-wiring 80 sensors to 80 physical PCB channels inevitably results in scrambled mapping. Traditional calibration requires 80 manual flashlight alignments. By using the sun as a known light source (via solar ephemeris), one outdoor scan is sufficient with direction accuracy of 0.3–0.5°.
+**Why auto-calibration with the sun?** Hand-wiring 80 sensors inevtably scrambles the channel-to-position mapping. Traditional calibration requires 80 manual flashlight alignments. Using the sun as a known light source via solar ephemeris, one outdoor scan is sufficient.
+
+**Why an OLED display?** Shows real-time status at negligible power cost (µA sleep, ~5mA during brief refresh). Shares the existing I2C bus with the ADCs — no extra pins needed.
+
+**Why onboard diagnostics?** Detecting sensor faults, overcast conditions, and low-confidence measurements at the edge allows the central controller to make informed decisions (ignore unreliable data, schedule maintenance, etc.) without polling.
 
 ## License
 
-MIT
+MIT — use, modify, sell freely with attribution.
