@@ -42,7 +42,7 @@
 | Resistor | 10kΩ (one per sensor) | 80 |
 | Resistor | 100kΩ (battery divider pair) | 2 |
 | Resistor | 4.7kΩ (I2C pull-up pair) | 2 |
-| OLED | SSD1306 128×64 I2C | 1 |
+| MIP Reflective LCD | Sharp Memory LCD LS013B7DH03, SPI | 1 |
 | 3D Print | Ball shell (PETG, 100mm) + internal frame | 1 |
 | Misc | Jumper wires, pin headers, heat shrink, silicone sealant | lots |
 
@@ -75,9 +75,9 @@
                     ESP32-WROOM-32 (38-pin dev board)
                    ┌────────────────────────────┐
        BOOT ───────┤ GPIO 0              GPIO 23├────── SIM7600G PWR_KEY
-    MODEM_RST ─────┤ GPIO 2              GPIO 22├────── I2C1 SCL (ADS1115#1 + OLED)
-     OLED_CS ──────┤ GPIO 4              GPIO 21├────── I2C1 SDA (ADS1115#1 + OLED)
-     OLED_DC ──────┤ GPIO 5              GPIO 19├────── I2C2 SCL (ADS1115#2)
+     MIP_MOSI ──────┤ GPIO 2              GPIO 22├────── I2C1 SCL (ADS1115#1)
+     MIP_SCLK ──────┤ GPIO 4              GPIO 21├────── I2C1 SDA (ADS1115#1)
+      MIP_CS ───────┤ GPIO 5              GPIO 19├────── I2C2 SCL (ADS1115#2)
     MUX_EN2 ───────┤ GPIO 12             GPIO 18├────── I2C2 SDA (ADS1115#2)
     MUX_EN3 ───────┤ GPIO 13             GPIO 17├────── SIM7600G TX
     MUX_EN1 ───────┤ GPIO 14             GPIO 16├────── SIM7600G RX
@@ -118,13 +118,12 @@
 
 | ESP32 GPIO | Connect To | I2C Address |
 |:----------:|-----------|:-----------:|
-| **21** (SDA) | ADS1115 #1 SDA + OLED SDA | 0x48, 0x3C |
-| **22** (SCL) | ADS1115 #1 SCL + OLED SCL | — |
+| **21** (SDA) | ADS1115 #1 SDA | 0x48 |
+| **22** (SCL) | ADS1115 #1 SCL | — |
 | **18** (SDA) | ADS1115 #2 SDA | 0x49 |
 | **19** (SCL) | ADS1115 #2 SCL | — |
 
-> **Important**: I2C requires 4.7kΩ pull-up resistors to 3.3V on both SDA and SCL lines.  
-> The OLED and ADS1115#1 share I2C1 — different addresses, no conflict.
+> **Important**: I2C requires 4.7kΩ pull-up resistors to 3.3V on both SDA and SCL lines.
 
 #### 4G Module (SIM7600G)
 
@@ -141,8 +140,9 @@
 |:----------:|-----------|-------|
 | **36** | Battery divider midpoint | Two 100kΩ in series, midpoint to GPIO36 |
 | **0** | Push-button (BOOT) | LOW = pressed = enter calibration mode |
-| **4** | OLED CS (reserved) | For e-ink expansion; current OLED uses I2C |
-| **5** | OLED DC (reserved) | For e-ink expansion |
+| **2** | MIP MOSI | Sharp Memory LCD SPI data |
+| **4** | MIP SCLK | Sharp Memory LCD SPI clock |
+| **5** | MIP CS | Sharp Memory LCD SPI chip select |
 
 ---
 
@@ -375,7 +375,7 @@ The ball is fully autonomous:
 - Every 5 seconds: wake → scan → diagnose → compute → display → publish → sleep
 - Sleep current < 1 mA
 - Solar panel charges battery during daylight; SOC stays 80–100%
-- OLED shows status each wake cycle, then powers off to save energy
+- MIP reflective LCD: retains image with zero power after refresh. Display stays visible during ESP32 deep sleep, draws no current, sunlight-readable
 
 ### What You Actually Need to Do
 
@@ -405,7 +405,7 @@ The ball auto-detects conditions:
 | 4G init fails | SIM not seated / no signal | Re-insert SIM, move to open area |
 | Direction wrong after cal | Calibrated on cloudy day / ball not level | Re-calibrate on a clear day |
 | MQTT won't publish | No network / broker unreachable | broker.emqx.io rate-limits sometimes; set up a local broker |
-| OLED blank | I2C address conflict | Check OLED is 0x3C (not 0x3D) |
+| Display blank | SPI wiring fault | Check GPIO 2/4/5 connections to MIP LCD; verify SPI signals with multimeter |
 | Battery drains fast | Solar panel dirty / MT3608 output wrong | Clean panel, verify MT3608 output is exactly 5V |
 
 ---

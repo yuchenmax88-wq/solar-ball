@@ -42,7 +42,7 @@
 | 电阻 | 10kΩ（每个传感器配 1 个） | 80 |
 | 电阻 | 100kΩ（电池分压） | 2 |
 | 电阻 | 4.7kΩ（I2C 上拉） | 2 |
-| OLED 屏 | SSD1306 128×64 I2C | 1 |
+| MIP 反射屏 | Sharp Memory LCD LS013B7DH03 (SPI) | 1 |
 | 3D 打印 | 球壳（PETG, 100mm） + 内部框架 | 1 |
 | 其他 | 杜邦线、排针、热缩管、硅胶密封剂 | 若干 |
 
@@ -75,9 +75,9 @@
                     ESP32-WROOM-32 (38-pin dev board)
                    ┌────────────────────────────┐
        BOOT ───────┤ GPIO 0              GPIO 23├────── SIM7600G PWR_KEY
-    MODEM_RST ─────┤ GPIO 2              GPIO 22├────── I2C1 SCL (ADS1115#1 + OLED)
-     OLED_CS ──────┤ GPIO 4              GPIO 21├────── I2C1 SDA (ADS1115#1 + OLED)
-     OLED_DC ──────┤ GPIO 5              GPIO 19├────── I2C2 SCL (ADS1115#2)
+     MIP_MOSI ──────┤ GPIO 2              GPIO 22├────── I2C1 SCL (ADS1115#1)
+     MIP_SCLK ──────┤ GPIO 4              GPIO 21├────── I2C1 SDA (ADS1115#1)
+      MIP_CS ───────┤ GPIO 5              GPIO 19├────── I2C2 SCL (ADS1115#2)
     MUX_EN2 ───────┤ GPIO 12             GPIO 18├────── I2C2 SDA (ADS1115#2)
     MUX_EN3 ───────┤ GPIO 13             GPIO 17├────── SIM7600G TX
     MUX_EN1 ───────┤ GPIO 14             GPIO 16├────── SIM7600G RX
@@ -118,13 +118,12 @@
 
 | ESP32 GPIO | 连接目标 | I2C 地址 |
 |:----------:|---------|:--------:|
-| **21** (SDA) | ADS1115 #1 SDA + OLED SDA | 0x48, 0x3C |
-| **22** (SCL) | ADS1115 #1 SCL + OLED SCL | — |
+| **21** (SDA) | ADS1115 #1 SDA | 0x48 |
+| **22** (SCL) | ADS1115 #1 SCL | — |
 | **18** (SDA) | ADS1115 #2 SDA | 0x49 |
 | **19** (SCL) | ADS1115 #2 SCL | — |
 
-> **注意**：I2C 需要 4.7kΩ 上拉电阻到 3.3V（SDA 和 SCL 各一个）。  
-> OLED 和 ADS1115#1 共用 I2C1 总线，地址不同不会冲突。
+> **注意**：I2C 需要 4.7kΩ 上拉电阻到 3.3V（SDA 和 SCL 各一个）。
 
 #### 4G 模块（SIM7600G）
 
@@ -141,8 +140,9 @@
 |:----------:|---------|------|
 | **36** | 电池分压中点 | 两个 100kΩ 串联，中点接 GPIO36 |
 | **0** | 按键（BOOT） | 低电平 = 按下 = 进入校准模式 |
-| **4** | OLED CS（预留） | e-ink 扩展用，当前 OLED 用 I2C |
-| **5** | OLED DC（预留） | e-ink 扩展用 |
+| **2** | MIP MOSI | Sharp Memory LCD 数据线 (SPI) |
+| **4** | MIP SCLK | Sharp Memory LCD 时钟线 (SPI) |
+| **5** | MIP CS | Sharp Memory LCD 片选线 (SPI) |
 
 ---
 
@@ -375,7 +375,7 @@ python mqtt_receiver.py
 - 每 5 秒：唤醒 → 扫描 → 诊断 → 计算 → 显示 → 发送 → 休眠
 - 休眠期间功耗 < 1mA
 - 有阳光时充电，电池保持在 80–100%
-- OLED 屏每次醒来自动显示状态，然后熄灭节电
+- MIP 反射式液晶屏：刷新后无需电力维持图像。ESP32 休眠期间屏幕持续显示最新状态，功耗为零，阳光下清晰可读
 
 ### 你只需要做的事
 
@@ -405,7 +405,7 @@ python mqtt_receiver.py
 | 4G 初始化失败 | SIM 卡没插好 / 没信号 | 检查 SIM 卡方向，到开阔处重试 |
 | 校准后方向不准 | 校准那天是阴天 / 球没放正 | 重新在晴天下校准 |
 | MQTT 发不出去 | 没网络 / Broker 连不上 | broker.emqx.io 有时会限流，换自建 Broker |
-| OLED 不亮 | I2C 地址冲突 | 检查 OLED 地址是否 0x3C（不是 0x3D） |
+| 屏幕不显示 | SPI 接线错误 | 检查 GPIO 2/4/5 到 MIP 屏的接线，确认信号通断 |
 | 电池很快没电 | 太阳能板脏了 / MT3608 没调好 | 清洁板面，检查 MT3608 输出是否 5V |
 
 ---
