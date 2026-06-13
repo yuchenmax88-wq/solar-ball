@@ -2,6 +2,7 @@
 #include "config.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
+#include "esp_sleep.h"
 #include "esp_log.h"
 #include <math.h>
 #include <stdbool.h>
@@ -22,15 +23,14 @@ void power_init(void) {
     adc_oneshot_new_unit(&unit_cfg, &adc_handle);
 
     adc_oneshot_chan_cfg_t chan_cfg = {
-        .atten = ADC_ATTEN_DB_11,
+        .atten = ADC_ATTEN_DB_12,
         .bitwidth = ADC_BITWIDTH_12,
     };
     adc_oneshot_config_channel(adc_handle, ADC_CHANNEL, &chan_cfg);
 
     adc_cali_line_fitting_config_t cali_config = {
         .unit_id = ADC_UNIT_1,
-        .chan = ADC_CHANNEL,
-        .atten = ADC_ATTEN_DB_11,
+        .atten = ADC_ATTEN_DB_12,
         .bitwidth = ADC_BITWIDTH_12,
     };
     esp_err_t ret = adc_cali_create_scheme_line_fitting(&cali_config, &adc_cali_handle);
@@ -53,7 +53,7 @@ uint32_t power_get_millivolts(void) {
     }
     adc_reading /= 16;
 
-    uint32_t voltage_mv;
+    int voltage_mv;
     if (adc_cali_done) {
         adc_cali_raw_to_voltage(adc_cali_handle, adc_reading, &voltage_mv);
     } else {
