@@ -1,7 +1,7 @@
 # Solar Ball — Directional Light Sensor for Solar Arrays
 
-[![Tests](https://github.com/opencode-solar/solar-ball/actions/workflows/test.yml/badge.svg)](https://github.com/opencode-solar/solar-ball/actions/workflows/test.yml)
-[![Firmware Build](https://github.com/opencode-solar/solar-ball/actions/workflows/firmware.yml/badge.svg)](https://github.com/opencode-solar/solar-ball/actions/workflows/firmware.yml)
+[![Tests](https://github.com/yuchenmax88-wq/solar-ball/actions/workflows/test.yml/badge.svg)](https://github.com/yuchenmax88-wq/solar-ball/actions/workflows/test.yml)
+[![Firmware Build](https://github.com/yuchenmax88-wq/solar-ball/actions/workflows/firmware.yml/badge.svg)](https://github.com/yuchenmax88-wq/solar-ball/actions/workflows/firmware.yml)
 
 A self-contained, self-powered directional light sensor that tells solar arrays where the sun is. Uses 80 phototransistors embedded on a 100mm sphere to measure the brightest sky direction, computes a unit vector, and transmits it via 4G MQTT to a central computer that adjusts solar panel orientation.
 
