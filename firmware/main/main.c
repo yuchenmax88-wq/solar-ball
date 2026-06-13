@@ -54,13 +54,13 @@ void app_main(void) {
     power_init();
     calib_load();
     remote_diag_init();
+    sensor_scan_init();  /* must init I2C before display */
     display_init();
 
     /* ---- Calibration mode check ---- */
     if (is_calibration_mode()) {
         ESP_LOGI(TAG, "BOOT button held - entering calibration mode");
         display_show_calib("Calibration mode", 0, 1);
-        sensor_scan_init();
         calib_run_auto();
         display_show_calib("Done", 1, 1);
         ESP_LOGI(TAG, "Calibration complete, proceeding to normal operation");
@@ -72,7 +72,6 @@ void app_main(void) {
     }
 
     /* ---- Sensor scan ---- */
-    sensor_scan_init();
     float sensor_values[SENSOR_COUNT];
     int scan_ok = sensor_scan_all(sensor_values);
 
