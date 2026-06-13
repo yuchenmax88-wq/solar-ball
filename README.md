@@ -7,7 +7,7 @@
 
 A self-contained, self-powered directional light sensor that tells solar arrays where the sun is.  
 80 phototransistors on a 100mm sphere → weighted centroid → direction vector → 4G MQTT → array tracking.  
-**BOM ~¥372 / ~$50. Direction accuracy 0.3–0.5° (calibrated).**
+**BOM ~¥412 / ~$55. Direction accuracy 0.3–0.5° (calibrated).**
 
 > 📖 **新手入门？** 直接看[操作手册 (中文)](docs/operation_manual.md) 或 [Operation Manual (English)](docs/operation_manual_en.md) — 从零件采购到日常运行的完整指南。
 
@@ -23,7 +23,7 @@ A self-contained, self-powered directional light sensor that tells solar arrays 
                                               │          │
                                               ▼          ▼
                                        display.c    mqtt_4g.c
-                                       (OLED)       (JSON via 4G)
+                                       (MIP LCD)    (JSON via 4G)
                                                          │
                                               ┌──────────┤
                                               ▼          ▼
@@ -43,9 +43,9 @@ A self-contained, self-powered directional light sensor that tells solar arrays 
 | Update interval | 5 seconds |
 | MCU | ESP32-WROOM-32 (ESP-IDF v5 / PlatformIO) |
 | Communication | SIM7600G 4G Cat-4, MQTT QoS 1 |
-| Display | SSD1306 128×64 OLED (I2C, auto-sleep) |
+| Display | Sharp Memory LCD 128×128 (MIP reflective, SPI, always-on) |
 | Power | 5W solar panel + 18650 2000mAh |
-| BOM cost | **~¥372 (~$50)** |
+| BOM cost | **~¥412 (~$55)** |
 | Firmware | C, 9 modules, ~2000 lines |
 | Tests | 7 suites, **389 assertions**, all passing |
 
@@ -65,7 +65,7 @@ A self-contained, self-powered directional light sensor that tells solar arrays 
 | | Weather classification (clear / overcast / night) | ✅ |
 | | Direction confidence scoring (0–255) | ✅ |
 | | Remote diagnostic counters (scan/publish stats) | ✅ |
-| **Display** | SSD1306 OLED status screen (I2C, µA sleep) | ✅ |
+| **Display** | Sharp Memory LCD (MIP reflective, SPI, always-on image) | ✅ |
 | | Shows direction, azimuth, elevation, SOC, RSSI, faults, confidence bar | ✅ |
 | **Safety** | Overcast/night → auto-point zenith, low confidence | ✅ |
 | | Low battery fault flag | ✅ |
@@ -111,7 +111,7 @@ solar-ball/
 │       ├── power.h/.c              Battery ADC + SOC + deep sleep
 │       ├── calibrate.h/.c          NVS + auto sun-cal + manual flashlight cal
 │       ├── sun_calc.h/.c           NOAA solar ephemeris (static)
-│       ├── display.h/.c            SSD1306 OLED I2C driver (5×7 font)
+│       ├── display.h/.c            Sharp Memory LCD SPI driver (always-on MIP reflective)
 │       ├── remote_diag.h/.c        Scan/publish counters
 │       └── scripts/
 │           └── generate_sensor_coords.py  Fibonacci sphere → C header
@@ -289,7 +289,7 @@ Additional validation scripts:
 
 **Why auto-calibration with the sun?** Hand-wiring 80 sensors inevtably scrambles the channel-to-position mapping. Traditional calibration requires 80 manual flashlight alignments. Using the sun as a known light source via solar ephemeris, one outdoor scan is sufficient.
 
-**Why an OLED display?** Shows real-time status at negligible power cost (µA sleep, ~5mA during brief refresh). Shares the existing I2C bus with the ADCs — no extra pins needed.
+**Why MIP reflective display?** Sharp Memory LCD draws zero power to maintain an image (each pixel is a tiny capacitor). The screen stays readable during ESP32 deep sleep, in direct sunlight, with no backlight. Only needs 3 SPI wires (MOSI, SCLK, CS) — zero additional GPIO conflicts.
 
 **Why onboard diagnostics?** Detecting sensor faults, overcast conditions, and low-confidence measurements at the edge allows the central controller to make informed decisions (ignore unreliable data, schedule maintenance, etc.) without polling.
 

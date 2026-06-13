@@ -49,11 +49,18 @@
 /* ADS1115 #1 (addr 0x48): MUX bank 0-3 on AIN0-AIN3 */
 /* ADS1115 #2 (addr 0x49): MUX bank 4 on AIN0, rest unused */
 
+/* ---------- Display (Sharp Memory LCD, SPI bit-bang) ---------- */
+#define DISPLAY_MOSI_GPIO       2
+#define DISPLAY_SCLK_GPIO       4
+#define DISPLAY_CS_GPIO         5
+
 /* ---------- 4G Module (SIM7600G) ---------- */
 #define MODEM_UART_TX_GPIO      17
 #define MODEM_UART_RX_GPIO      16
 #define MODEM_PWR_KEY_GPIO      23  /* power on/off key */
-#define MODEM_RESET_GPIO        2   /* hardware reset */
+#define MODEM_RESET_GPIO        2   /* NOTE: GPIO 2 shared with display MOSI.
+                                       Hardware modem reset not available when
+                                       display is present. Display takes priority. */
 #define MODEM_BAUDRATE          115200
 
 #define MQTT_BROKER_HOST        "broker.emqx.io"

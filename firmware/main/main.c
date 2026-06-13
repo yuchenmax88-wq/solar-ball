@@ -164,11 +164,9 @@ void app_main(void) {
     /* ---- Record stats ---- */
     remote_diag_record_publish(publish_ok > 0 ? 1 : 0);
 
-    /* ---- Display update ---- */
+    /* ---- Display update (MIP reflective: image persists during sleep) ---- */
     display_show_status(direction.x, direction.y, direction.z,
                         soc, rssi, error_mask, confidence);
-    vTaskDelay(pdMS_TO_TICKS(2000));  /* give user time to read */
-    display_sleep();
 
     /* ---- Log summary ---- */
     ESP_LOGI(TAG, "=== Solar Ball Report ===");

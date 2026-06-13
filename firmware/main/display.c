@@ -1,56 +1,93 @@
 #include "display.h"
 #include "config.h"
-#include "driver/i2c.h"
+#include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
 
 static const char *TAG = "display";
 
-/* SSD1306 I2C address */
-#define DISPLAY_ADDR         0x3C
-#define DISPLAY_I2C_NUM      I2C_NUM_0  /* share I2C1 with ADS1115 #1 */
+/* ---- Sharp Memory LCD pin assignments (from config.h) ---- */
+#define LCD_MOSI_GPIO       DISPLAY_MOSI_GPIO
+#define LCD_SCLK_GPIO       DISPLAY_SCLK_GPIO
+#define LCD_CS_GPIO         DISPLAY_CS_GPIO
 
-/* Display dimensions */
-#define DISPLAY_WIDTH        128
-#define DISPLAY_HEIGHT       64
-#define DISPLAY_PAGES        (DISPLAY_HEIGHT / 8)
+/* ---- Display geometry ---- */
+#define LCD_WIDTH           128
+#define LCD_HEIGHT          64
+#define LCD_LINES           (LCD_HEIGHT)
+#define LCD_BYTES_PER_LINE  (LCD_WIDTH / 8)
 
-static uint8_t framebuf[DISPLAY_WIDTH * DISPLAY_PAGES];
-static bool display_active = false;
+/* ---- Sharp LCD protocol ---- */
+#define SHARP_CMD_UPDATE    0x00   /* mode=0, VCOM bit added separately */
+#define SHARP_TRAILER       0x00
 
-/* ---- Low-level SSD1306 commands ---- */
+static uint8_t framebuf[LCD_LINES][LCD_BYTES_PER_LINE];
+static bool s_vcom = false;
 
-static void ssd1306_write_cmd(uint8_t cmd) {
-    i2c_cmd_handle_t handle = i2c_cmd_link_create();
-    i2c_master_start(handle);
-    i2c_master_write_byte(handle, (DISPLAY_ADDR << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write_byte(handle, 0x00, true);  /* command mode */
-    i2c_master_write_byte(handle, cmd, true);
-    i2c_master_stop(handle);
-    i2c_master_cmd_begin(DISPLAY_I2C_NUM, handle, pdMS_TO_TICKS(10));
-    i2c_cmd_link_delete(handle);
+/* ---- Low-level SPI bit-bang ---- */
+
+static void lcd_spi_write_byte(uint8_t data) {
+    for (int b = 7; b >= 0; b--) {
+        gpio_set_level(LCD_SCLK_GPIO, 0);
+        gpio_set_level(LCD_MOSI_GPIO, (data >> b) & 1);
+        esp_rom_delay_us(1);
+        gpio_set_level(LCD_SCLK_GPIO, 1);
+        esp_rom_delay_us(1);
+    }
 }
 
-static void ssd1306_write_data(const uint8_t *data, size_t len) {
-    i2c_cmd_handle_t handle = i2c_cmd_link_create();
-    i2c_master_start(handle);
-    i2c_master_write_byte(handle, (DISPLAY_ADDR << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write_byte(handle, 0x40, true);  /* data mode */
-    i2c_master_write(handle, data, len, true);
-    i2c_master_stop(handle);
-    i2c_master_cmd_begin(DISPLAY_I2C_NUM, handle, pdMS_TO_TICKS(50));
-    i2c_cmd_link_delete(handle);
+static void lcd_cs_low(void)  { gpio_set_level(LCD_CS_GPIO, 0); }
+static void lcd_cs_high(void) { gpio_set_level(LCD_CS_GPIO, 1); }
+
+/* ---- Sharp LCD commands ---- */
+
+static void sharp_send_command(void) {
+    uint8_t cmd = SHARP_CMD_UPDATE;
+    if (s_vcom) cmd |= 0x40;  /* VCOM bit in bit 6 */
+    s_vcom = !s_vcom;
+    lcd_spi_write_byte(cmd);
 }
 
-static void ssd1306_set_pos(uint8_t page, uint8_t col) {
-    ssd1306_write_cmd(0xB0 | (page & 0x07));    /* page address */
-    ssd1306_write_cmd(0x00 | (col & 0x0F));      /* lower column */
-    ssd1306_write_cmd(0x10 | ((col >> 4) & 0x0F)); /* upper column */
+static void sharp_send_line(uint8_t line, const uint8_t *data) {
+    /* Line address is 1-based, bit 7 = 0 */
+    uint8_t addr = (line + 1) & 0x7F;
+    lcd_spi_write_byte(addr);
+    for (int i = 0; i < LCD_BYTES_PER_LINE; i++) {
+        lcd_spi_write_byte(~data[i]);  /* Sharp: 0 = black, 1 = white. Invert for intuitive API */
+    }
 }
 
-/* ---- Pixel drawing (5x7 font) ---- */
+static void sharp_flush(void) {
+    lcd_cs_low();
+    sharp_send_command();
+    for (int line = 0; line < LCD_LINES; line++) {
+        sharp_send_line(line, framebuf[line]);
+    }
+    lcd_spi_write_byte(SHARP_TRAILER);
+    lcd_cs_high();
+    esp_rom_delay_us(6);  /* hold time */
+}
+
+/* ---- Framebuffer pixel ops ---- */
+
+static void fb_clear(void) {
+    memset(framebuf, 0xFF, sizeof(framebuf));  /* 0xFF = all white (Sharp: 0=black) */
+}
+
+static void fb_set_pixel(int x, int y, bool black) {
+    if (x < 0 || x >= LCD_WIDTH || y < 0 || y >= LCD_HEIGHT) return;
+    int byte_idx = x / 8;
+    int bit_idx = 7 - (x % 8);  /* MSB = leftmost pixel */
+    if (black)
+        framebuf[y][byte_idx] &= ~(1 << bit_idx);   /* 0 = black */
+    else
+        framebuf[y][byte_idx] |= (1 << bit_idx);    /* 1 = white */
+}
+
+/* ---- 5x7 font (same as before) ---- */
 
 static const uint8_t font_5x7[96][5] = {
     {0x00,0x00,0x00,0x00,0x00}, /* space */
@@ -146,22 +183,14 @@ static const uint8_t font_5x7[96][5] = {
     {0x44,0x64,0x54,0x4C,0x44}, /* z */
 };
 
-static void fb_set_pixel(int x, int y, bool on) {
-    if (x < 0 || x >= DISPLAY_WIDTH || y < 0 || y >= DISPLAY_HEIGHT) return;
-    int page = y / 8;
-    int bit = y % 8;
-    if (on)
-        framebuf[x + page * DISPLAY_WIDTH] |= (1 << bit);
-    else
-        framebuf[x + page * DISPLAY_WIDTH] &= ~(1 << bit);
-}
-
 static void fb_draw_char(int x, int y, char c) {
     if (c < 32 || c > 127) c = ' ';
     const uint8_t *glyph = font_5x7[c - 32];
     for (int col = 0; col < 5; col++) {
         for (int row = 0; row < 7; row++) {
-            fb_set_pixel(x + col, y + row, glyph[col] & (1 << row));
+            if (glyph[col] & (1 << row)) {
+                fb_set_pixel(x + col, y + row, true);  /* true = black pixel */
+            }
         }
     }
 }
@@ -189,62 +218,29 @@ static void fb_draw_line(int x0, int y0, int x1, int y1) {
     }
 }
 
-static void fb_clear(void) {
-    memset(framebuf, 0, sizeof(framebuf));
-}
-
-static void fb_flush(void) {
-    for (int page = 0; page < DISPLAY_PAGES; page++) {
-        ssd1306_set_pos(page, 0);
-        ssd1306_write_data(&framebuf[page * DISPLAY_WIDTH], DISPLAY_WIDTH);
-    }
-}
-
 /* ---- Public API ---- */
 
 void display_init(void) {
-    ESP_LOGI(TAG, "Initializing SSD1306 OLED on I2C addr 0x%02X", DISPLAY_ADDR);
+    ESP_LOGI(TAG, "Initializing Sharp Memory LCD on GPIO MOSI=%d SCLK=%d CS=%d",
+             LCD_MOSI_GPIO, LCD_SCLK_GPIO, LCD_CS_GPIO);
 
-    /* Init sequence */
-    ssd1306_write_cmd(0xAE);  /* display off */
-    ssd1306_write_cmd(0xD5);  /* clock div */
-    ssd1306_write_cmd(0x80);
-    ssd1306_write_cmd(0xA8);  /* multiplex */
-    ssd1306_write_cmd(0x3F);  /* 64 */
-    ssd1306_write_cmd(0xD3);  /* display offset */
-    ssd1306_write_cmd(0x00);
-    ssd1306_write_cmd(0x40);  /* start line */
-    ssd1306_write_cmd(0x8D);  /* charge pump */
-    ssd1306_write_cmd(0x14);  /* enable */
-    ssd1306_write_cmd(0x20);  /* memory mode */
-    ssd1306_write_cmd(0x00);  /* horizontal */
-    ssd1306_write_cmd(0xA1);  /* seg remap */
-    ssd1306_write_cmd(0xC8);  /* com scan direction */
-    ssd1306_write_cmd(0xDA);  /* com pins */
-    ssd1306_write_cmd(0x12);
-    ssd1306_write_cmd(0x81);  /* contrast */
-    ssd1306_write_cmd(0xCF);
-    ssd1306_write_cmd(0xD9);  /* pre-charge */
-    ssd1306_write_cmd(0xF1);
-    ssd1306_write_cmd(0xDB);  /* VCOM detect */
-    ssd1306_write_cmd(0x40);
-    ssd1306_write_cmd(0xA4);  /* display all on resume */
-    ssd1306_write_cmd(0xA6);  /* normal display */
-    ssd1306_write_cmd(0x2E);  /* deactivate scroll */
-    ssd1306_write_cmd(0xAF);  /* display on */
+    gpio_set_direction(LCD_MOSI_GPIO, GPIO_MODE_OUTPUT);
+    gpio_set_direction(LCD_SCLK_GPIO, GPIO_MODE_OUTPUT);
+    gpio_set_direction(LCD_CS_GPIO, GPIO_MODE_OUTPUT);
+
+    gpio_set_level(LCD_MOSI_GPIO, 0);
+    gpio_set_level(LCD_SCLK_GPIO, 0);
+    lcd_cs_high();
 
     fb_clear();
-    fb_flush();
-    display_active = true;
+    sharp_flush();  /* clear screen */
 
-    ESP_LOGI(TAG, "Display initialized");
+    ESP_LOGI(TAG, "Display initialized (MIP reflective, always-on image)");
 }
 
 void display_show_status(float dx, float dy, float dz,
                          uint8_t soc, int16_t rssi,
                          uint16_t error_mask, uint8_t confidence) {
-    if (!display_active) display_wake();
-
     fb_clear();
 
     /* Title bar */
@@ -252,7 +248,7 @@ void display_show_status(float dx, float dy, float dz,
 
     /* Direction vector */
     char buf[32];
-    snprintf(buf, sizeof(buf), "Dir: %.3f %.3f %.3f", dx, dy, dz);
+    snprintf(buf, sizeof(buf), "Dir:%.3f %.3f %.3f", dx, dy, dz);
     fb_draw_text(0, 0, buf);
 
     /* Azimuth / Elevation */
@@ -262,20 +258,20 @@ void display_show_status(float dx, float dy, float dz,
     snprintf(buf, sizeof(buf), "AZ:%4.0f EL:%+3.0f", az, elev);
     fb_draw_text(0, 13, buf);
 
-    /* Battery */
-    snprintf(buf, sizeof(buf), "BAT: %3u%% %4ddBm", soc, rssi);
+    /* Battery + Signal */
+    snprintf(buf, sizeof(buf), "BAT:%3u%% %4ddBm", soc, rssi);
     fb_draw_text(0, 24, buf);
 
     /* Faults */
     if (error_mask == 0) {
         fb_draw_text(0, 36, "Status: OK");
     } else {
-        snprintf(buf, sizeof(buf), "Fault: 0x%04X", error_mask);
+        snprintf(buf, sizeof(buf), "Fault:0x%04X", error_mask);
         fb_draw_text(0, 36, buf);
     }
 
     /* Confidence bar */
-    snprintf(buf, sizeof(buf), "Confidence: %u%%", confidence);
+    snprintf(buf, sizeof(buf), "Conf:%u%%", (unsigned)(confidence * 100 / 255));
     fb_draw_text(0, 48, buf);
     int bar_w = (confidence * 100) / 255;
     if (bar_w > 100) bar_w = 100;
@@ -283,12 +279,10 @@ void display_show_status(float dx, float dy, float dz,
     fb_draw_line(72, 55, 127, 55);
     fb_draw_line(72, 57, 127, 57);
 
-    fb_flush();
+    sharp_flush();
 }
 
 void display_show_calib(const char *status, int progress, int total) {
-    if (!display_active) display_wake();
-
     fb_clear();
     fb_draw_text(0, 0, "Calibration");
     fb_draw_text(0, 12, status);
@@ -306,22 +300,10 @@ void display_show_calib(const char *status, int progress, int total) {
     fb_draw_line(13, 37, 113, 37);
     fb_draw_line(13, 49, 113, 49);
 
-    fb_flush();
+    sharp_flush();
 }
 
-void display_sleep(void) {
-    if (!display_active) return;
-    ssd1306_write_cmd(0xAE);  /* display off */
-    ssd1306_write_cmd(0x8D);  /* charge pump */
-    ssd1306_write_cmd(0x10);  /* disable */
-    display_active = false;
-    ESP_LOGI(TAG, "Display sleep");
-}
-
-void display_wake(void) {
-    if (display_active) return;
-    ssd1306_write_cmd(0x8D);  /* charge pump */
-    ssd1306_write_cmd(0x14);  /* enable */
-    ssd1306_write_cmd(0xAF);  /* display on */
-    display_active = true;
+void display_clear(void) {
+    fb_clear();
+    sharp_flush();
 }

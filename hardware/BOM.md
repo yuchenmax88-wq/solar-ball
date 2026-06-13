@@ -13,6 +13,7 @@
 | 7 | TP4056 Module | 1A Li-ion charger, Micro-USB input | 1 | ¥3 | ¥3 |
 | 8 | MT3608 Module | Boost converter, 2A max, 5V output | 1 | ¥3 | ¥3 |
 | 9 | AMS1117-3.3 | 3.3V LDO regulator | 1 | ¥1 | ¥1 |
+| 10 | Sharp Memory LCD | LS013B7DH03, 1.28" 128x128 MIP reflective (SPI) | 1 | ¥40 | ¥40 |
 
 ## Passives & Connectors
 
@@ -52,7 +53,7 @@
 | Passives | ¥12.7 |
 | Antenna & SIM | ¥80 |
 | Enclosure & Structure | ¥83 |
-| **Grand Total** | **¥371.9** |
+| **Grand Total** | **~¥412** |
 
 ## Notes
 - Prices are estimates from LCSC / Taobao / 1688 in CNY (2026)

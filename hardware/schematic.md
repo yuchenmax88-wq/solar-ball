@@ -100,10 +100,23 @@ Each of the 80 sensors:
 | 17 | MODEM_TX | O | UART to SIM7600G |
 | 16 | MODEM_RX | I | UART from SIM7600G |
 | 23 | MODEM_PWR_KEY | O | Power-on pulse |
-| 2 | MODEM_RST | O | Reset signal |
+| 2 | LCD_MOSI | O | Sharp Memory LCD SPI data |
+| 4 | LCD_SCLK | O | Sharp Memory LCD SPI clock |
+| 5 | LCD_CS | O | Sharp Memory LCD SPI chip select |
 | 36 | BAT_ADC | I | Battery voltage (ADC1_CH0) |
 | 0 | BOOT | I | Calibration mode (active low) |
 | 5V | MODEM_PWR | - | External 5V to SIM7600G |
+
+## 5. Display (Sharp Memory LCD)
+```
+ESP32                  Sharp LS013B7DH03
+GPIO 2 (MOSI) ──────── DIN  (SPI data)
+GPIO 4 (SCLK) ──────── SCLK (SPI clock)
+GPIO 5 (CS)   ──────── SCS  (chip select)
+3.3V          ──────── VDD
+GND           ──────── GND
+```
+Image persists during ESP32 deep sleep. 0 power to maintain.
 
 ## 5. Battery Voltage Divider
 
