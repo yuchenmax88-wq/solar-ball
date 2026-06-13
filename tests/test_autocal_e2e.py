@@ -207,7 +207,6 @@ def run_e2e_test(lat, lon, unix_ts, sun_pos, desc):
         r += random.gauss(0, 0.005)
         r = max(0.0, min(1.0, r))
         readings_per_pos.append(1.0 - r)  # INVERT: ALS-PT19 common-emitter: bright→low voltage→low ADC
-        readings_per_pos.append(max(0.0, min(1.0, r)))
 
     # Scramble wiring (random permutation)
     perm = list(range(S))

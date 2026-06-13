@@ -260,7 +260,6 @@ int modem_get_unix_time(uint32_t *unix_ts) {
     if (uart_wait_response("+CCLK:", 3000) == 0) {
         int yy, MM, dd, hh, mm, ss;
         int tz_hours = 0;
-        int tz_sign = 1;
 
         /* Parse date/time part first */
         if (sscanf(resp_buf, "+CCLK: \"%d/%d/%d,%d:%d:%d", &yy, &MM, &dd, &hh, &mm, &ss) < 6) {
@@ -268,17 +267,22 @@ int modem_get_unix_time(uint32_t *unix_ts) {
             return -1;
         }
 
-        /* Find and parse the timezone offset after the time */
-        char *tz_ptr = strchr(resp_buf, '+');
-        if (!tz_ptr) {
-            tz_ptr = strchr(resp_buf, '-');
-            if (tz_ptr) tz_sign = -1;
+        /* Find the timezone offset: it's the LAST + or - in the response
+         * (strchr finds the +CCLK: prefix first, which is wrong). */
+        char *tz_ptr = NULL;
+        char *last_plus = strrchr(resp_buf, '+');
+        char *last_minus = strrchr(resp_buf, '-');
+        if (last_plus && last_minus) {
+            tz_ptr = (last_plus > last_minus) ? last_plus : last_minus;
+        } else if (last_plus) {
+            tz_ptr = last_plus;
+        } else if (last_minus) {
+            tz_ptr = last_minus;
         }
-        /* Try to parse the offset again (skip the sign we already found) */
         if (tz_ptr) {
-            tz_hours = atoi(tz_ptr);  /* atoi handles sign: "+08" → 8, "-05" → -5 */
+            tz_hours = atoi(tz_ptr);
         } else {
-            tz_hours = tz_sign * 8;  /* fallback: assume China UTC+8 */
+            tz_hours = 8;  /* fallback: assume China UTC+8 */
         }
 
         /* Convert LOCAL time to UTC by subtracting the offset */
