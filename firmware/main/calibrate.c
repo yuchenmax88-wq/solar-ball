@@ -355,6 +355,36 @@ void calib_run_auto(void) {
                 g_calib_state = CALIB_STATE_WAITING;
             }
 
+        } else if (strcmp(line, "CAL:BASELINE_START") == 0) {
+            /* Baseline calibration: scan all sensors in uniform diffuse light,
+             * average 100 samples each, store as normalization reference. */
+            printf("CAL:BASELINE sampling %d sensors x %d samples...\n",
+                   SENSOR_COUNT, CALIB_SAMPLE_COUNT);
+
+            uint32_t accum[SENSOR_COUNT];
+            memset(accum, 0, sizeof(accum));
+
+            for (int sample = 0; sample < CALIB_SAMPLE_COUNT; sample++) {
+                for (int phys = 0; phys < SENSOR_COUNT; phys++) {
+                    int bank = phys / MUX_CHANNELS_PER_BANK;
+                    int ch = phys % MUX_CHANNELS_PER_BANK;
+                    accum[phys] += sensor_read_raw(bank, ch);
+                }
+                if (sample % 10 == 0) {
+                    printf("CAL:BASELINE_PROGRESS %d/%d\n", sample, CALIB_SAMPLE_COUNT);
+                }
+            }
+
+            for (int phys = 0; phys < SENSOR_COUNT; phys++) {
+                g_calib.baseline[phys] = (uint16_t)(accum[phys] / CALIB_SAMPLE_COUNT);
+            }
+
+            if (calib_save() == 0) {
+                printf("CAL:BASELINE_OK\n");
+            } else {
+                printf("CAL:BASELINE_ERR NVS write failed\n");
+            }
+
         } else if (strcmp(line, "CAL:QUIT") == 0) {
             printf("CAL:QUIT_OK\n");
             g_calib_state = CALIB_STATE_IDLE;
