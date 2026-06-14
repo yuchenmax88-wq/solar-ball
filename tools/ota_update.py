@@ -127,8 +127,8 @@ def uart_ota(port, firmware_path, version):
     print(f"Port: {device}")
 
     ser = serial.Serial(device, BAUDRATE, timeout=1)
-    ser.flushInput()
-    ser.flushOutput()
+    ser.reset_input_buffer()
+    ser.reset_output_buffer()
 
     print("Waiting for device sync...")
     ser.write(OTA_SYNC_PATTERN)

@@ -140,7 +140,7 @@ main.c
 ### Command Receive (broker → ball)
 - **Topic**: `/solar/ball/{ball_id}/cmd`
 - **QoS**: 1
-- **Supported commands**: `ota`, `config` (future)
+- **Supported commands**: `ota`, `config`
 - **Payload**: JSON with `cmd` field + parameters
 
 ## Calibration System
@@ -232,7 +232,7 @@ Solar Panel (5W) → TP4056 → 18650 (2000mAh)
  │   Real protocol + simulated sensors     │
  ├─────────────────────────────────────────┤
  │         Unit Tests (7 test_*.py files)   │  Algorithm correctness
- │     direction, mqtt, power, calib...    │  (418 assertions)
+ │     direction, mqtt, power, calib...    │  (419 assertions)
  ├─────────────────────────────────────────┤
  │    Monte Carlo (test_autocal_validation) │  200-trial accuracy
  │     Calibration robustness testing      │

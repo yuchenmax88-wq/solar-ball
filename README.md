@@ -46,8 +46,8 @@ A self-contained, self-powered directional light sensor that tells solar arrays 
 | Display | Sharp Memory LCD 128×128 (MIP reflective, SPI, always-on) |
 | Power | 5W solar panel + 18650 2000mAh |
 | BOM cost | **~¥412 (~$55)** |
-| Firmware | C, 11 modules, ~2400 lines |
-| Tests | 8 suites, **418+ assertions**, all passing |
+| Firmware | C, 12 modules, ~2800 lines |
+| Tests | 8 suites, **419 assertions**, all passing |
 
 ## Features
 
@@ -107,7 +107,7 @@ solar-ball/
 │   ├── CMakeLists.txt              Top-level CMake
 │   ├── sdkconfig.defaults          Kconfig defaults (4MB flash, I2C legacy)
 │   └── main/
-│       ├── CMakeLists.txt          Component registration (9 source files)
+│       ├── CMakeLists.txt          Component registration (12 source files)
 │       ├── config.h                All pin mappings, broker, APN, timing
 │       ├── sensor_positions.h      80 Fibonacci unit vectors (auto-generated)
 │       ├── sensor_calib.h          Calibration data structures + state enum
@@ -144,7 +144,7 @@ solar-ball/
 │   ├── test_autocal_e2e.py         GPS→ephemeris→calibrate→direction pipeline
 │   └── simulate.py                 Desktop simulator (noise, accuracy sweep)
 ├── hardware/
-│   ├── BOM.md                      ¥372 bill of materials
+│   ├── BOM.md                      ~¥412 bill of materials
 │   ├── schematic.md                Full circuit + GPIO pin map
 │   ├── ball_design.md              3D shell + sensor placement design
 │   └── dust_protection.md          Replaceable PTFE sock + vibration cleaning
@@ -178,8 +178,8 @@ solar-ball/
 ## Quick Start
 
 ```bash
-# Generate sensor coordinates
-cd firmware/scripts && python generate_sensor_coords.py
+# Generate sensor coordinates (if you need to regenerate sensor_positions.h)
+# cd firmware/main/scripts && python generate_sensor_coords.py
 
 # Build firmware
 cd firmware && platformio run
@@ -325,7 +325,7 @@ $ python tests/run_all.py
   test_remote_diag.py       — 20 passed    diagnostic protocol
   test_integration.py       — 27 passed    E2E pipeline, MQTT, OTA, multi-ball, faults
 ============================================================
-All tests passed!  (417 assertions, zero failures)
+All tests passed!  (419 assertions, zero failures)
 ```
 
 ### Integration tests (28 tests, 1 skipped):

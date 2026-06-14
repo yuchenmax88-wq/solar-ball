@@ -13,6 +13,8 @@ tests = [
     "test_weather.py",
     "test_saturation.py",
     "test_remote_diag.py",
+    "test_autocal_validation.py",
+    "test_autocal_e2e.py",
     "integration/test_integration.py",
 ]
 

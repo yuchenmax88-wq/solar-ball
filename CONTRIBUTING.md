@@ -16,12 +16,8 @@ Thanks for your interest in contributing. This document outlines the workflow an
 git clone https://github.com/yuchenmax88-wq/solar-ball.git
 cd solar-ball
 
-# Generate sensor coordinate header (required before first build)
-cd firmware/main/scripts
-python generate_sensor_coords.py
-
 # Build firmware
-cd ../firmware
+cd firmware
 platformio run
 ```
 
@@ -67,7 +63,7 @@ cd tests
 python run_all.py
 ```
 
-Expected output: 8 suites, all passing (418 assertions).
+Expected output: 8 suites, all passing (419 assertions).
 
 ### Adding tests
 

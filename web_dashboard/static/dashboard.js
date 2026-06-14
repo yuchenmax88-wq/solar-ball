@@ -12,6 +12,7 @@ let allBalls = {};
 const evtSource = new EventSource("/stream");
 
 evtSource.onopen = () => {
+  allBalls = {};
   document.getElementById("conn-status").className = "status-dot online";
   document.getElementById("conn-text").textContent = "Live";
 };
@@ -74,7 +75,10 @@ document.getElementById("chart-load")?.addEventListener("click", async () => {
   try {
     const resp = await fetch(`/api/history/${ball}?limit=${limit}`);
     const rows = await resp.json();
-    if (!rows.length) return;
+    if (!rows.length) {
+      destroyCharts();
+      return;
+    }
     rows.reverse();
 
     const labels = rows.map(r => r.ts ? new Date(r.ts*1000).toLocaleTimeString() : "");
@@ -240,10 +244,10 @@ document.getElementById("cfg-generate")?.addEventListener("click", () => {
 #endif /* CONFIG_H */`;
 
   const out = document.getElementById("cfg-output");
-  out.innerHTML = `<pre style="background:var(--bg);border:1px solid var(--border);
+  out.innerHTML = `<pre id="cfg-code" style="background:var(--bg);border:1px solid var(--border);
     border-radius:6px;padding:12px;overflow:auto;max-height:500px;font-size:.8em;
     white-space:pre-wrap">${esc(h)}</pre>
-    <button class="btn btn-primary" style="margin-top:8px" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent)">Copy to Clipboard</button>`;
+    <button class="btn btn-primary" style="margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById('cfg-code').textContent)">Copy to Clipboard</button>`;
 });
 
 function badgeClass(kind) {
@@ -317,6 +321,7 @@ function renderOverview() {
 function drawCompass(bid, az, elev) {
   const canvas = document.getElementById(`compass-${bid}`);
   if (!canvas) return;
+  try { canvas.getContext("2d"); } catch(e) { return; }
   const ctx = canvas.getContext("2d");
   const cx = 80, cy = 80, r = 72;
   ctx.clearRect(0, 0, 160, 160);
@@ -356,7 +361,6 @@ function populateChartSelect() {
   const sel = document.getElementById("chart-ball");
   if (!sel) return;
   const cur = sel.value;
-  if (ids.length > 0 && cur && ids.includes(cur)) return;
   sel.innerHTML = '<option value="">-- Select --</option>' +
     ids.map(id => `<option value="${id}" ${id===cur?'selected':''}>${id}</option>`).join("");
 }
@@ -374,6 +378,10 @@ function populateSelects() {
 
 function populateDetailSelect() { populateSelects(); }
 function populateHistorySelect() { populateSelects(); }
+
+document.getElementById("detail-select")?.addEventListener("change", () => {
+  renderDetail();
+});
 
 function renderDetail() {
   const sel = document.getElementById("detail-select");
@@ -448,9 +456,10 @@ document.getElementById("history-load")?.addEventListener("click", async () => {
     for (const r of rows) {
       const ts = r.ts ? new Date(r.ts * 1000).toLocaleTimeString() : "N/A";
       const az = r.azimuth?.toFixed(1) || "-";
-      const elev = r.elevation?.toFixed(1) || "-";
+      const elev = r.elevation?.toFixed(1) || "0.0";
       const faz = az !== "-" ? az : "-";
-      const ftilt = (90 - parseFloat(elev || 0)).toFixed(1);
+      const elevDeg = parseFloat(elev);
+      const ftilt = isNaN(elevDeg) ? "-" : (90 - elevDeg).toFixed(1);
       html += `<tr>
         <td>${esc(String(ts))}</td>
         <td>${az}&deg;</td>

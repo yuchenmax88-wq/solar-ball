@@ -179,8 +179,8 @@ def on_mqtt_message(client, userdata, msg):
 
     try:
         store_reading(data)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[DB] Failed to store reading: {e}")
 
 
 def start_mqtt(broker, port, topic):
@@ -208,37 +208,6 @@ def sse_stream():
             yield f"data: {msg}\n\n"
         except queue.Empty:
             yield f"data: {json.dumps({'ping': True})}\n\n"
-
-
-FEATURES = [
-    ("80-sensor Fibonacci sphere", True),
-    ("Weighted centroid direction", True),
-    ("4G MQTT communication", True),
-    ("Sensing fault detection", True),
-    ("Weather classification", True),
-    ("Direction confidence score", True),
-    ("Auto-calibration (sun)", True),
-    ("Manual calibration (flashlight)", True),
-    ("Baseline normalization", True),
-    ("Sharp LCD display", True),
-    ("Self-powered (solar + battery)", True),
-    ("OTA firmware upgrade", True),
-    ("Remote diagnostics", True),
-    ("Dust protection design", True),
-]
-
-FAULT_DEFS = {
-    0x0001: ("SENSOR_OPEN", "warning"),
-    0x0002: ("SENSOR_SHORT", "warning"),
-    0x0004: ("SATURATED", "info"),
-    0x0008: ("ADC_ERR", "danger"),
-    0x0010: ("MODEM_ERR", "danger"),
-    0x0020: ("MQTT_ERR", "danger"),
-    0x0040: ("LOW_BAT", "danger"),
-    0x0080: ("NO_CALIB", "warning"),
-    0x0100: ("OVERCAST", "info"),
-    0x0200: ("NIGHT", "info"),
-}
 
 
 @app.route("/")
@@ -329,8 +298,9 @@ def api_ota_trigger():
 
 @app.route("/api/stats")
 def api_stats():
-    conn = sqlite3.connect(str(DB_PATH))
-    total = conn.execute("SELECT COUNT(*) FROM direction_log").fetchone()[0]
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        total = conn.execute("SELECT COUNT(*) FROM direction_log").fetchone()[0]
     balls = conn.execute(
         "SELECT ball_id, COUNT(*) as cnt, MAX(ts) as last_ts FROM direction_log GROUP BY ball_id"
     ).fetchall()

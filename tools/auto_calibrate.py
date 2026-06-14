@@ -29,6 +29,7 @@ import sys
 import time
 import serial
 import re
+import argparse
 from colorama import init, Fore, Style
 
 init(autoreset=True)
@@ -278,26 +279,23 @@ def calibration_quality_report(channel_map: dict) -> str:
 
 
 def main():
-    if len(sys.argv) < 2:
-        print(f"Usage: python {sys.argv[0]} <COM_PORT> [--auto] [--report]")
-        print(f"  COM_PORT     - Serial port (e.g. COM3)")
-        print(f"  --auto       - Run sun auto-calibration (no manual steps)")
-        print(f"  --report     - Generate calibration quality report after cal")
-        print(f"  (no flag)    - Run manual flashlight calibration")
-        sys.exit(1)
-
-    port = sys.argv[1]
-    auto_mode = "--auto" in sys.argv
-    report_mode = "--report" in sys.argv
+    parser = argparse.ArgumentParser(
+        description="Solar Ball Auto-Calibration Tool — maps sensor channels to ball positions")
+    parser.add_argument("port", help="Serial port (e.g. COM3 on Windows, /dev/ttyUSB0 on Linux)")
+    parser.add_argument("--auto", action="store_true",
+                        help="Run sun auto-calibration (no manual flashlight steps)")
+    parser.add_argument("--report", action="store_true",
+                        help="Generate calibration quality report after cal")
+    args = parser.parse_args()
 
     try:
-        calibrator = BallCalibrator(port)
-        if auto_mode:
+        calibrator = BallCalibrator(args.port)
+        if args.auto:
             calibrator.auto_sun_calibrate()
         else:
             calibrator.interactive_calibrate()
 
-        if report_mode and calibrator.channel_map:
+        if args.report and calibrator.channel_map:
             report = calibration_quality_report(calibrator.channel_map)
             print()
             print(report)
@@ -312,6 +310,10 @@ def main():
         sys.exit(1)
     except KeyboardInterrupt:
         print(f"\n{Fore.YELLOW}Calibration cancelled by user.{Style.RESET_ALL}")
+        try:
+            calibrator.ser.close()
+        except Exception:
+            pass
         sys.exit(0)
 
 

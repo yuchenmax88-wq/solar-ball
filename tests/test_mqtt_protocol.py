@@ -81,7 +81,6 @@ def test_serialize_valid():
     }
     s = serialize_direction(pkt)
     parsed = json.loads(s)
-    check("json valid", True)
     check("id matches", parsed["id"] == "ball-001")
     check("ts matches", parsed["ts"] == 1718000000)
     check("dx matches", abs(parsed["dx"] - 0.3215) < 0.0001, f"got {parsed['dx']}")

@@ -194,10 +194,14 @@ void app_main(void) {
                                 int dl_ret = modem_http_download_chunked(
                                     ota_url, ota_write_chunk);
                                 if (dl_ret == 0) {
-                                    ota_finish();
-                                    ESP_LOGI(TAG, "OTA update complete, rebooting...");
-                                    vTaskDelay(pdMS_TO_TICKS(2000));
-                                    esp_restart();
+                                    if (ota_finish() == 0) {
+                                        ESP_LOGI(TAG, "OTA update complete, rebooting...");
+                                        vTaskDelay(pdMS_TO_TICKS(2000));
+                                        esp_restart();
+                                    } else {
+                                        ESP_LOGE(TAG, "OTA verification failed — device NOT updated");
+                                        error_mask |= FAULT_MQTT_ERROR;
+                                    }
                                 } else {
                                     ota_abort();
                                     ESP_LOGE(TAG, "OTA download failed");
