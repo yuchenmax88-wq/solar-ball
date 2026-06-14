@@ -127,3 +127,124 @@ void sensor_diag_analyze(const sensor_diag_result_t *diag,
              (faults & FAULT_OVERCAST_SKY) ? 1 : 0,
              (faults & FAULT_NO_SIGNAL) ? 1 : 0);
 }
+
+int sensor_diag_deep_analyze(const sensor_diag_result_t *diag,
+                             char *report, size_t report_len) {
+    if (!diag || !report || report_len < 64) return 0;
+
+    int offset = 0;
+    int open_channels[16], open_count = 0;
+    int shorted_channels[16], shorted_count = 0;
+    int saturated_channels[16], saturated_count = 0;
+    float sum_raw = 0;
+
+    for (int phys = 0; phys < SENSOR_COUNT; phys++) {
+        uint16_t raw = diag->raw_values[phys];
+        sum_raw += raw;
+        if (raw >= (uint16_t)OPEN_THRESHOLD) {
+            if (open_count < 16) open_channels[open_count++] = phys;
+        }
+        if (raw <= (uint16_t)SHORT_THRESHOLD) {
+            if (shorted_count < 16) shorted_channels[shorted_count++] = phys;
+        }
+        if (raw <= (uint16_t)SATURATION_THRESHOLD && raw > (uint16_t)SHORT_THRESHOLD) {
+            if (saturated_count < 16) saturated_channels[saturated_count++] = phys;
+        }
+    }
+
+    int total_faults = open_count + shorted_count + saturated_count;
+
+    if (open_count > 0) {
+        offset += snprintf(report + offset, report_len - offset,
+            "%d sensor(s) open (ch:", open_count);
+        for (int i = 0; i < open_count && i < 4; i++) {
+            offset += snprintf(report + offset, report_len - offset,
+                "%s%d", i > 0 ? "," : "", open_channels[i]);
+        }
+        if (open_count > 4) {
+            offset += snprintf(report + offset, report_len - offset, ",...");
+        }
+        offset += snprintf(report + offset, report_len - offset, "). ");
+    }
+
+    if (shorted_count > 0) {
+        offset += snprintf(report + offset, report_len - offset,
+            "%d sensor(s) shorted (ch:", shorted_count);
+        for (int i = 0; i < shorted_count && i < 4; i++) {
+            offset += snprintf(report + offset, report_len - offset,
+                "%s%d", i > 0 ? "," : "", shorted_channels[i]);
+        }
+        if (shorted_count > 4) {
+            offset += snprintf(report + offset, report_len - offset, ",...");
+        }
+        offset += snprintf(report + offset, report_len - offset, "). ");
+    }
+
+    if (saturated_count > 0) {
+        offset += snprintf(report + offset, report_len - offset,
+            "%d sensor(s) saturated (ch:", saturated_count);
+        for (int i = 0; i < saturated_count && i < 4; i++) {
+            offset += snprintf(report + offset, report_len - offset,
+                "%s%d", i > 0 ? "," : "", saturated_channels[i]);
+        }
+        if (saturated_count > 4) {
+            offset += snprintf(report + offset, report_len - offset, ",...");
+        }
+        offset += snprintf(report + offset, report_len - offset, "). ");
+    }
+
+    if (diag->adc_errors > 0) {
+        offset += snprintf(report + offset, report_len - offset,
+            "%d I2C/ADC error(s). ", diag->adc_errors);
+    }
+
+    bool overcast = false;
+    bool night = false;
+
+    if (diag->max_raw > 0 && diag->min_raw < diag->max_raw) {
+        float mean = (diag->max_raw + diag->min_raw) / 2.0f;
+        if (mean > 0.1f) {
+            float cv = sqrtf(diag->variance) / mean;
+            if (cv < OVERCAST_CV_THRESHOLD) {
+                overcast = true;
+                offset += snprintf(report + offset, report_len - offset,
+                    "Overcast sky (CV=%.2f). ", (double)cv);
+            }
+        }
+    }
+
+    if (diag->max_raw > 0) {
+        float brightness = 1.0f - (float)diag->min_raw / (float)diag->max_raw;
+        if (brightness < 0.01f && diag->max_raw > (uint16_t)(OPEN_THRESHOLD * 0.8f)) {
+            night = true;
+            offset += snprintf(report + offset, report_len - offset,
+                "Nighttime (brightness=%.3f). ", (double)brightness);
+        }
+    }
+
+    float mean_raw = sum_raw / SENSOR_COUNT;
+    offset += snprintf(report + offset, report_len - offset,
+        "Mean ADC=%d. ", (int)mean_raw);
+
+    if (total_faults == 0 && !overcast && !night) {
+        offset += snprintf(report + offset, report_len - offset,
+            "All sensors OK. Clear sky.");
+    } else if (overcast && total_faults == 0) {
+        offset += snprintf(report + offset, report_len - offset,
+            "Root cause: uniform cloud cover — point zenith.");
+    } else if (night) {
+        offset += snprintf(report + offset, report_len - offset,
+            "Root cause: insufficient light — standby mode.");
+    } else if (open_count >= 3) {
+        offset += snprintf(report + offset, report_len - offset,
+            "Root cause: possible physical damage (multiple opens).");
+    } else if (total_faults <= 2) {
+        offset += snprintf(report + offset, report_len - offset,
+            "Minor faults (%d sensors). Direction still valid.", total_faults);
+    } else {
+        offset += snprintf(report + offset, report_len - offset,
+            "Multiple fault types. Check wiring.");
+    }
+
+    return offset;
+}

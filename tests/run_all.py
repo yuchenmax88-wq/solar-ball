@@ -13,6 +13,7 @@ tests = [
     "test_weather.py",
     "test_saturation.py",
     "test_remote_diag.py",
+    "integration/test_integration.py",
 ]
 
 all_ok = True

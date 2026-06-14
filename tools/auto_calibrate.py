@@ -205,16 +205,90 @@ def verify_mapping(port: str) -> bool:
     return True
 
 
+def calibration_quality_report(channel_map: dict) -> str:
+    """
+    Assess calibration quality and produce a report.
+
+    Checks:
+      - Coverage: how many positions were mapped (out of 80)
+      - Duplicates: if two positions map to the same channel (wiring error)
+      - Consecutive channel patterns: expected if wiring follows PCB order
+      - Gap analysis: missing positions
+    """
+    total_positions = 80
+    mapped_count = len(channel_map)
+    coverage_pct = mapped_count / total_positions * 100
+
+    report_lines = []
+    report_lines.append("=" * 60)
+    report_lines.append("  Calibration Quality Report")
+    report_lines.append("=" * 60)
+    report_lines.append(f"  Positions mapped: {mapped_count}/{total_positions} ({coverage_pct:.1f}%)")
+
+    quality = "EXCELLENT" if coverage_pct >= 98 else (
+        "GOOD" if coverage_pct >= 90 else (
+        "FAIR" if coverage_pct >= 70 else "POOR"))
+
+    report_lines.append(f"  Quality grade:     {quality}")
+
+    if mapped_count == total_positions:
+        report_lines.append("  All 80 positions mapped successfully.")
+    else:
+        missing = sorted(set(range(total_positions)) - set(channel_map.keys()))
+        report_lines.append(f"  Missing positions: {len(missing)} — {missing[:10]}{'...' if len(missing) > 10 else ''}")
+
+    channels_used = list(channel_map.values())
+    unique_channels = set(channels_used)
+    if len(unique_channels) < len(channels_used):
+        duplicates = []
+        seen = {}
+        for pos, ch in sorted(channel_map.items()):
+            if ch in seen:
+                duplicates.append(f"pos#{seen[ch]} & pos#{pos} → ch#{ch}")
+            seen[ch] = pos
+        report_lines.append(f"  WARNING: {len(channels_used) - len(unique_channels)} duplicate channel mapping(s):")
+        for d in duplicates[:5]:
+            report_lines.append(f"    {d}")
+
+    prev = -1
+    breaks = []
+    for ch in sorted(channels_used):
+        if prev >= 0 and ch != prev + 1:
+            breaks.append((prev, ch))
+        prev = ch
+    if len(breaks) <= 2:
+        report_lines.append("  Channel sequence: mostly consecutive — OK.")
+    else:
+        report_lines.append(f"  Channel sequence: {len(breaks)} gaps — wiring may be non-contiguous.")
+
+    if mapped_count >= 70:
+        report_lines.append("  Direction accuracy estimate: 0.3–0.5° (with baseline norm).")
+    elif mapped_count >= 50:
+        report_lines.append("  Direction accuracy estimate: 0.8–1.5° (reduced by sparse mapping).")
+    else:
+        report_lines.append("  Direction accuracy estimate: >2° (insufficient mapping).")
+
+    report_lines.append("  Recommendation: " + (
+        "Proceed to operation." if quality in ("EXCELLENT", "GOOD") else
+        "Re-run calibration for better accuracy." if quality == "FAIR" else
+        "Re-check wiring and re-calibrate."))
+
+    report_lines.append("=" * 60 + "\n")
+    return "\n".join(report_lines)
+
+
 def main():
     if len(sys.argv) < 2:
-        print(f"Usage: python {sys.argv[0]} <COM_PORT> [--auto]")
+        print(f"Usage: python {sys.argv[0]} <COM_PORT> [--auto] [--report]")
         print(f"  COM_PORT     - Serial port (e.g. COM3)")
         print(f"  --auto       - Run sun auto-calibration (no manual steps)")
+        print(f"  --report     - Generate calibration quality report after cal")
         print(f"  (no flag)    - Run manual flashlight calibration")
         sys.exit(1)
 
     port = sys.argv[1]
     auto_mode = "--auto" in sys.argv
+    report_mode = "--report" in sys.argv
 
     try:
         calibrator = BallCalibrator(port)
@@ -222,6 +296,16 @@ def main():
             calibrator.auto_sun_calibrate()
         else:
             calibrator.interactive_calibrate()
+
+        if report_mode and calibrator.channel_map:
+            report = calibration_quality_report(calibrator.channel_map)
+            print()
+            print(report)
+            log_path = f"calibration_report_{time.strftime('%Y%m%d_%H%M%S')}.txt"
+            with open(log_path, "w") as f:
+                f.write(report)
+            print(f"Report saved to: {log_path}")
+
     except serial.SerialException as e:
         print(f"{Fore.RED}Serial error: {e}{Style.RESET_ALL}")
         print(f"Make sure the ESP32 is connected to {port} and nothing else is using it.")

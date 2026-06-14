@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solar Ball Dashboard</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f172a; --card: #1e293b; --border: #334155;
+  --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8;
+  --green: #22c55e; --yellow: #eab308; --red: #ef4444; --orange: #f97316;
+  --radius: 10px;
+}
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg);
+       color: var(--text); min-height: 100vh; }
+.header { background: var(--card); border-bottom: 1px solid var(--border);
+          padding: 12px 24px; display: flex; justify-content: space-between;
+          align-items: center; position: sticky; top: 0; z-index: 100; }
+.header h1 { font-size: 1.3em; color: var(--accent); }
+.status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.status-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.status-dot.offline { background: var(--red); }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+        gap: 16px; padding: 16px; }
+.card { background: var(--card); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 16px; }
+.card h2 { font-size: 1em; color: var(--muted); margin-bottom: 12px;
+           text-transform: uppercase; letter-spacing: .5px; }
+.stat-row { display: flex; justify-content: space-between; align-items: center;
+            padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+.stat-label { color: var(--muted); font-size: .85em; }
+.stat-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px;
+         font-size: .75em; font-weight: 600; margin: 1px 2px; }
+.badge-ok { background: rgba(34,197,94,.2); color: var(--green); }
+.badge-warn { background: rgba(234,179,8,.2); color: var(--yellow); }
+.badge-err { background: rgba(239,68,68,.2); color: var(--red); }
+.badge-info { background: rgba(56,189,248,.2); color: var(--accent); }
+.bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 3px; transition: width .5s ease; }
+.soc-bar .bar-fill { background: var(--green); }
+.conf-bar .bar-fill { background: var(--accent); }
+.dir-viz { display: flex; justify-content: center; align-items: center;
+           height: 180px; position: relative; margin: 12px 0; }
+.dir-viz canvas { border-radius: 50%; }
+.dir-compass { position: relative; width: 160px; height: 160px; }
+.compass-label { position: absolute; font-size: .7em; color: var(--muted);
+                 font-weight: 600; }
+.compass-label.n { top: 4px; left: 50%; transform: translateX(-50%); }
+.compass-label.e { top: 50%; right: 4px; transform: translateY(-50%); }
+.compass-label.s { bottom: 4px; left: 50%; transform: translateX(-50%); }
+.compass-label.w { top: 50%; left: 4px; transform: translateY(-50%); }
+.dot { position: absolute; width: 8px; height: 8px; background: var(--accent);
+       border-radius: 50%; transform: translate(-50%, -50%);
+       box-shadow: 0 0 8px var(--accent); }
+.tabs { display: flex; gap: 2px; margin: 0 16px; }
+.tab { padding: 8px 16px; background: var(--card); border: 1px solid var(--border);
+       border-bottom: none; border-radius: var(--radius) var(--radius) 0 0;
+       cursor: pointer; color: var(--muted); font-size: .85em; }
+.tab.active { background: var(--border); color: var(--text); }
+.panel { padding: 16px; }
+table { width: 100%; border-collapse: collapse; font-size: .85em; }
+th { text-align: left; color: var(--muted); padding: 8px 6px;
+     border-bottom: 1px solid var(--border); font-weight: 500; }
+td { padding: 6px; border-bottom: 1px solid rgba(255,255,255,.03); }
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; color: var(--muted); font-size: .85em;
+                    margin-bottom: 4px; }
+.form-group input, .form-group select { width: 100%; padding: 8px 10px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); font-size: .9em; }
+.btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: .85em;
+       font-weight: 600; cursor: pointer; }
+.btn-primary { background: var(--accent); color: #0f172a; }
+.btn-primary:hover { opacity: .85; }
+.hidden { display: none !important; }
+.empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
+.empty-state .icon { font-size: 3em; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Solar Ball Dashboard</h1>
+  <span style="font-size:.85em;color:var(--muted)">
+    <span class="status-dot" id="conn-status"></span>
+    <span id="conn-text">Connecting...</span>
+    &nbsp;|&nbsp; Balls: <strong id="ball-count">0</strong>
+  </span>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="overview">Overview</div>
+  <div class="tab" data-tab="detail">Ball Detail</div>
+  <div class="tab" data-tab="history">History</div>
+  <div class="tab" data-tab="charts">Charts</div>
+  <div class="tab" data-tab="ota">OTA Update</div>
+  <div class="tab" data-tab="config">Config Wizard</div>
+</div>
+
+<div id="panel-overview" class="panel">
+  <div class="grid" id="balls-container">
+    <div class="empty-state" id="empty-state">
+      <div class="icon">&#9728;</div>
+      <p>Waiting for ball data...</p>
+      <p style="font-size:.8em;margin-top:4px">
+        Ensure the MQTT broker is running and balls are publishing to
+        <code>/solar/ball/+/direction</code>
+      </p>
+    </div>
+  </div>
+</div>
+
+<div id="panel-detail" class="panel hidden">
+  <div style="margin-bottom:12px">
+    <label style="color:var(--muted);font-size:.85em">Select Ball:</label>
+    <select id="detail-select" style="padding:6px 10px;background:var(--bg);
+           border:1px solid var(--border);border-radius:6px;color:var(--text);
+           font-size:.9em;min-width:160px;">
+      <option value="">-- Select --</option>
+    </select>
+  </div>
+  <div id="detail-content"></div>
+</div>
+
+<div id="panel-history" class="panel hidden">
+  <div style="margin-bottom:12px;display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+    <div>
+      <label style="color:var(--muted);font-size:.85em">Ball:</label>
+      <select id="history-ball" style="padding:6px 10px;background:var(--bg);
+            border:1px solid var(--border);border-radius:6px;color:var(--text);
+            font-size:.9em">
+        <option value="">-- Select --</option>
+      </select>
+    </div>
+    <div>
+      <label style="color:var(--muted);font-size:.85em">Limit:</label>
+      <select id="history-limit" style="padding:6px 10px;background:var(--bg);
+            border:1px solid var(--border);border-radius:6px;color:var(--text);
+            font-size:.9em">
+        <option value="20">20</option>
+        <option value="50">50</option>
+        <option value="100" selected>100</option>
+        <option value="200">200</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="history-load">Load</button>
+  </div>
+  <div id="history-table" style="overflow-x:auto"></div>
+</div>
+
+<div id="panel-ota" class="panel hidden">
+  <div class="card" style="max-width:500px">
+    <h2>Trigger OTA Firmware Update</h2>
+    <div class="form-group">
+      <label>Ball ID</label>
+      <select id="ota-ball" style="width:100%;padding:8px 10px;background:var(--bg);
+            border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:.9em">
+        <option value="ball-001">ball-001</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Firmware URL (HTTP)</label>
+      <input type="url" id="ota-url" placeholder="http://ota.example.com/solar-ball.bin">
+    </div>
+    <div class="form-group">
+      <label>Version</label>
+      <input type="text" id="ota-version" value="1.2.0">
+    </div>
+    <button class="btn btn-primary" id="ota-send">Send OTA Command</button>
+    <div id="ota-result" style="margin-top:12px;font-size:.85em"></div>
+  </div>
+</div>
+
+<div id="panel-charts" class="panel hidden">
+  <div style="margin-bottom:12px;display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+    <div>
+      <label style="color:var(--muted);font-size:.85em">Ball:</label>
+      <select id="chart-ball" style="padding:6px 10px;background:var(--bg);
+            border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:.9em">
+        <option value="">-- Select --</option>
+      </select>
+    </div>
+    <div>
+      <label style="color:var(--muted);font-size:.85em">Points:</label>
+      <select id="chart-limit" style="padding:6px 10px;background:var(--bg);
+            border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:.9em">
+        <option value="20">20</option><option value="50">50</option>
+        <option value="100" selected>100</option><option value="200">200</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" id="chart-load">Load Charts</button>
+  </div>
+  <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(450px, 1fr))">
+    <div class="card"><h2>Direction Trajectory</h2>
+      <canvas id="chart-trajectory" style="max-height:300px"></canvas></div>
+    <div class="card"><h2>Battery & Signal</h2>
+      <canvas id="chart-telemetry" style="max-height:300px"></canvas></div>
+    <div class="card"><h2>Confidence Trend</h2>
+      <canvas id="chart-confidence" style="max-height:300px"></canvas></div>
+    <div class="card"><h2>Fault Timeline</h2>
+      <canvas id="chart-faults" style="max-height:300px"></canvas></div>
+  </div>
+</div>
+
+<div id="panel-config" class="panel hidden">
+  <div class="card" style="max-width:600px">
+    <h2>Generate Firmware Configuration</h2>
+    <p style="color:var(--muted);font-size:.85em;margin-bottom:12px">
+      Fill in your settings below, then copy the generated <code>config.h</code> content.
+    </p>
+    <div class="form-group">
+      <label>Ball ID</label>
+      <input type="text" id="cfg-ball-id" value="ball-001">
+    </div>
+    <div class="form-group">
+      <label>Firmware Version</label>
+      <input type="text" id="cfg-version" value="1.2.0">
+    </div>
+    <div class="form-group">
+      <label>MQTT Broker Host</label>
+      <input type="text" id="cfg-broker" value="broker.emqx.io">
+    </div>
+    <div class="form-group">
+      <label>MQTT Broker Port</label>
+      <input type="number" id="cfg-broker-port" value="1883">
+    </div>
+    <div class="form-group">
+      <label>APN (IoT SIM)</label>
+      <input type="text" id="cfg-apn" value="cmiot">
+    </div>
+    <div class="form-group">
+      <label>APN Username</label>
+      <input type="text" id="cfg-apn-user" value="" placeholder="(usually empty)">
+    </div>
+    <div class="form-group">
+      <label>APN Password</label>
+      <input type="text" id="cfg-apn-pass" value="" placeholder="(usually empty)">
+    </div>
+    <div class="form-group">
+      <label>Scan Interval (seconds)</label>
+      <input type="number" id="cfg-scan-interval" value="5" min="1" max="3600">
+    </div>
+    <div class="form-group">
+      <label>Battery Full Voltage (mV)</label>
+      <input type="number" id="cfg-bat-full" value="4200">
+    </div>
+    <div class="form-group">
+      <label>Battery Empty Voltage (mV)</label>
+      <input type="number" id="cfg-bat-empty" value="3200">
+    </div>
+    <button class="btn btn-primary" id="cfg-generate">Generate config.h</button>
+    <div id="cfg-output" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/static/dashboard.js"></script>
+</body>
+</html>

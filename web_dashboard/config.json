@@ -1,0 +1,8 @@
+{
+    "mqtt_broker": "broker.emqx.io",
+    "mqtt_port": 1883,
+    "topic": "/solar/ball/+/direction",
+    "ball_ids": ["ball-001"],
+    "history_limit": 100,
+    "refresh_interval_s": 5
+}

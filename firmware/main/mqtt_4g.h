@@ -51,4 +51,43 @@ int modem_get_unix_time(uint32_t *unix_ts);
  */
 void modem_power_off(void);
 
+/*
+ * Subscribe to MQTT command topic to receive OTA triggers.
+ * Returns 0 on success, -1 on failure.
+ */
+int mqtt_subscribe_cmd(const char *ball_id);
+
+/*
+ * Check for pending MQTT messages (non-blocking poll).
+ * If a message is received, it is stored in payload/payload_len.
+ * Returns 1 if message received, 0 if no message, -1 on error.
+ */
+int mqtt_poll_message(char *topic, size_t topic_len,
+                      char *payload, size_t payload_len);
+
+/*
+ * Download a file from an HTTP URL via the SIM7600G modem.
+ * url: full URL to download from
+ * buf: buffer to store downloaded data
+ * buf_size: size of the buffer
+ * bytes_read: output, actual bytes downloaded
+ * Returns 0 on success, -1 on failure.
+ */
+int modem_http_download(const char *url, uint8_t *buf, size_t buf_size,
+                        size_t *bytes_read);
+
+/*
+ * Download a file from HTTP in chunks, writing each chunk via callback.
+ * Callback receives (data, len, offset) and returns 0 on success.
+ * Returns 0 on success, -1 on failure.
+ */
+typedef int (*ota_chunk_callback_t)(const uint8_t *data, size_t len, uint32_t offset);
+int modem_http_download_chunked(const char *url, ota_chunk_callback_t callback);
+
+/*
+ * Get HTTP file size via HEAD request.
+ * Returns file size on success, -1 on failure.
+ */
+int modem_http_head_size(const char *url);
+
 #endif /* MQTT_4G_H */

@@ -318,3 +318,228 @@ void modem_power_off(void) {
 
     ESP_LOGI(TAG, "4G module powered off");
 }
+
+int mqtt_subscribe_cmd(const char *ball_id) {
+    char topic[MQTT_TOPIC_MAX_LEN];
+    snprintf(topic, sizeof(topic), "%s%s/cmd", MQTT_TOPIC_PREFIX, ball_id);
+
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd), "AT+CMQTTSUBTOPIC=0,%d,0", (int)strlen(topic));
+    if (at_send_cmd(cmd, ">", 3000) != 0) {
+        ESP_LOGE(TAG, "MQTT subscribe topic setup failed");
+        return -1;
+    }
+
+    uart_send(topic);
+    if (uart_wait_response("OK", 3000) != 0) {
+        ESP_LOGE(TAG, "MQTT subscribe topic send failed");
+        return -1;
+    }
+
+    uart_send("AT+CMQTTSUB=0");
+    if (uart_wait_response("OK", 3000) != 0) {
+        ESP_LOGE(TAG, "MQTT subscribe failed");
+        return -1;
+    }
+
+    ESP_LOGI(TAG, "Subscribed to %s", topic);
+    return 0;
+}
+
+int mqtt_poll_message(char *topic, size_t topic_len,
+                       char *payload, size_t payload_len) {
+    int len = 0;
+    memset(resp_buf, 0, sizeof(resp_buf));
+
+    int avail = 0;
+    uart_get_buffered_data_len(UART_NUM, (size_t *)&avail);
+    if (avail == 0) {
+        return 0;
+    }
+
+    len = uart_read_bytes(UART_NUM, (uint8_t *)resp_buf,
+                          sizeof(resp_buf) - 1, pdMS_TO_TICKS(500));
+    if (len <= 0) {
+        return 0;
+    }
+    resp_buf[len] = '\0';
+
+    char *recv = strstr(resp_buf, "+CMQTTRX:");
+    if (recv == NULL) {
+        return 0;
+    }
+
+    if (topic && topic_len > 0) {
+        char *topic_start = strstr(recv, "\"");
+        if (topic_start) {
+            topic_start++;
+            char *topic_end = strchr(topic_start, '"');
+            if (topic_end) {
+                size_t tlen = topic_end - topic_start;
+                if (tlen < topic_len) {
+                    memcpy(topic, topic_start, tlen);
+                    topic[tlen] = '\0';
+                }
+            }
+        }
+    }
+
+    if (payload && payload_len > 0) {
+        char *pay_start = strstr(recv + 9, ",");
+        if (pay_start) {
+            pay_start++;
+            while (*pay_start == ' ') pay_start++;
+            strncpy(payload, pay_start, payload_len - 1);
+            payload[payload_len - 1] = '\0';
+        }
+    }
+
+    uart_flush(UART_NUM);
+    return 1;
+}
+
+int modem_http_head_size(const char *url) {
+    char cmd[OTA_URL_MAX_LEN + 64];
+
+    snprintf(cmd, sizeof(cmd), "AT+HTTPHEAD=1,\"Range: bytes=0-0\"");
+    at_send_cmd(cmd, "OK", 2000);
+
+    snprintf(cmd, sizeof(cmd), "AT+HTTPPARA=\"URL\",\"%s\"", url);
+    if (at_send_cmd(cmd, "OK", 5000) != 0) return -1;
+
+    uart_send("AT+HTTPACTION=1");
+    if (uart_wait_response("+HTTPACTION:", 30000) != 0) return -1;
+
+    int status, data_len;
+    if (sscanf(resp_buf, "+HTTPACTION: 1,%d,%d", &status, &data_len) >= 2) {
+        if (status == 200) {
+            return data_len;
+        }
+        ESP_LOGE(TAG, "HTTP HEAD returned status %d", status);
+        return -1;
+    }
+    return -1;
+}
+
+int modem_http_download(const char *url, uint8_t *buf, size_t buf_size,
+                         size_t *bytes_read) {
+    char cmd[OTA_URL_MAX_LEN + 64];
+    *bytes_read = 0;
+
+    snprintf(cmd, sizeof(cmd), "AT+HTTPPARA=\"URL\",\"%s\"", url);
+    if (at_send_cmd(cmd, "OK", 5000) != 0) {
+        ESP_LOGE(TAG, "HTTP URL set failed");
+        return -1;
+    }
+
+    uart_send("AT+HTTPACTION=0");
+    if (uart_wait_response("+HTTPACTION:", OTA_HTTP_RECV_TIMEOUT_MS) != 0) {
+        ESP_LOGE(TAG, "HTTP GET timeout");
+        return -1;
+    }
+
+    int status, data_len;
+    if (sscanf(resp_buf, "+HTTPACTION: 0,%d,%d", &status, &data_len) < 2) {
+        ESP_LOGE(TAG, "HTTP response parse failed");
+        return -1;
+    }
+
+    if (status != 200) {
+        ESP_LOGE(TAG, "HTTP returned status %d", status);
+        return -1;
+    }
+
+    if (data_len > (int)buf_size) {
+        ESP_LOGE(TAG, "HTTP response too large: %d > %u", data_len, (unsigned)buf_size);
+        return -1;
+    }
+
+    uart_send("AT+HTTPREAD=0,0");
+    if (uart_wait_response("+HTTPREAD:", OTA_HTTP_CHUNK_TIMEOUT_MS) != 0) {
+        ESP_LOGE(TAG, "HTTP READ timeout");
+        return -1;
+    }
+
+    int read_len;
+    if (sscanf(resp_buf, "+HTTPREAD: %d", &read_len) == 1) {
+        int total_read = 0;
+        int remaining = read_len;
+
+        while (remaining > 0) {
+            uart_flush(UART_NUM);
+            int chunk = uart_read_bytes(UART_NUM, buf + total_read,
+                                        remaining, pdMS_TO_TICKS(5000));
+            if (chunk <= 0) break;
+            total_read += chunk;
+            remaining -= chunk;
+        }
+
+        if (total_read > 0 && total_read <= (int)buf_size) {
+            *bytes_read = (size_t)total_read;
+            ESP_LOGI(TAG, "HTTP download complete: %d bytes", total_read);
+            return 0;
+        }
+    }
+
+    ESP_LOGE(TAG, "HTTP READ data extraction failed");
+    return -1;
+}
+
+int modem_http_download_chunked(const char *url, ota_chunk_callback_t callback) {
+    char cmd[OTA_URL_MAX_LEN + 64];
+
+    snprintf(cmd, sizeof(cmd), "AT+HTTPPARA=\"URL\",\"%s\"", url);
+    if (at_send_cmd(cmd, "OK", 5000) != 0) {
+        ESP_LOGE(TAG, "HTTP URL set failed");
+        return -1;
+    }
+
+    uart_send("AT+HTTPACTION=0");
+    if (uart_wait_response("+HTTPACTION:", OTA_HTTP_RECV_TIMEOUT_MS) != 0) {
+        ESP_LOGE(TAG, "HTTP GET timeout");
+        return -1;
+    }
+
+    int status;
+    if (sscanf(resp_buf, "+HTTPACTION: 0,%d", &status) < 1 || status != 200) {
+        ESP_LOGE(TAG, "HTTP status %d", status);
+        return -1;
+    }
+
+    uart_send("AT+HTTPREAD=0,0");
+    if (uart_wait_response("+HTTPREAD:", OTA_HTTP_CHUNK_TIMEOUT_MS) != 0) {
+        ESP_LOGE(TAG, "HTTP READ timeout");
+        return -1;
+    }
+
+    int total_len;
+    if (sscanf(resp_buf, "+HTTPREAD: %d", &total_len) != 1) {
+        ESP_LOGE(TAG, "HTTP READ parse failed");
+        return -1;
+    }
+
+    uint8_t chunk_buf[OTA_CHUNK_SIZE];
+    uint32_t offset = 0;
+    int remaining = total_len;
+
+    while (remaining > 0) {
+        int to_read = remaining < (int)sizeof(chunk_buf) ? remaining : (int)sizeof(chunk_buf);
+        uart_flush(UART_NUM);
+        int read_len = uart_read_bytes(UART_NUM, chunk_buf, to_read, pdMS_TO_TICKS(5000));
+        if (read_len <= 0) {
+            ESP_LOGE(TAG, "Chunk read failed at offset %lu", (unsigned long)offset);
+            return -1;
+        }
+
+        if (callback(chunk_buf, (size_t)read_len, offset) != 0) {
+            ESP_LOGE(TAG, "Chunk callback rejected at offset %lu", (unsigned long)offset);
+            return -1;
+        }
+
+        offset += read_len;
+        remaining -= read_len;
+    }
+
+    ESP_LOGI(TAG, "Chunked download complete: %lu bytes", (unsigned long)offset);
+    return 0;
+}

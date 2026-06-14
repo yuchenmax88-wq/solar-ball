@@ -10,6 +10,8 @@ idf_component_register(
         display.c
         sensor_diag.c
         remote_diag.c
+        ota.c
+        remote_config.c
     INCLUDE_DIRS
         .
     REQUIRES
@@ -18,4 +20,5 @@ idf_component_register(
         esp_adc
         esp_hw_support
         esp_timer
+        app_update
 )

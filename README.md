@@ -3,7 +3,7 @@
 [![Tests](https://github.com/yuchenmax88-wq/solar-ball/actions/workflows/test.yml/badge.svg)](https://github.com/yuchenmax88-wq/solar-ball/actions/workflows/test.yml)
 [![Firmware Build](https://github.com/yuchenmax88-wq/solar-ball/actions/workflows/firmware.yml/badge.svg)](https://github.com/yuchenmax88-wq/solar-ball/actions/workflows/firmware.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.0-green)](firmware/main/config.h)
+[![Version](https://img.shields.io/badge/version-1.3.0-green)](firmware/main/config.h)
 
 A self-contained, self-powered directional light sensor that tells solar arrays where the sun is.  
 80 phototransistors on a 100mm sphere → weighted centroid → direction vector → 4G MQTT → array tracking.  
@@ -46,8 +46,8 @@ A self-contained, self-powered directional light sensor that tells solar arrays 
 | Display | Sharp Memory LCD 128×128 (MIP reflective, SPI, always-on) |
 | Power | 5W solar panel + 18650 2000mAh |
 | BOM cost | **~¥412 (~$55)** |
-| Firmware | C, 9 modules, ~2000 lines |
-| Tests | 7 suites, **389 assertions**, all passing |
+| Firmware | C, 11 modules, ~2400 lines |
+| Tests | 8 suites, **418+ assertions**, all passing |
 
 ## Features
 
@@ -75,6 +75,15 @@ A self-contained, self-powered directional light sensor that tells solar arrays 
 | **Tooling** | PC calibration tool (serial UART, manual + auto modes) | ✅ |
 | | MQTT receiver (subscribe → vector → panel angles) | ✅ |
 | | Desktop simulator (full pipeline, noise modeling) | ✅ |
+| | **Web configuration dashboard (Flask + SSE + Chart.js)** | ✅ |
+| | **Remote configuration via MQTT (NVS persistent)** | ✅ |
+| | **Calibration quality report (coverage, gaps, grade)** | ✅ |
+| | **Config wizard (web-based config.h generator)** | ✅ |
+| | **Fault root cause analysis (deep diagnostics)** | ✅ |
+| | **Architecture documentation (docs/architecture.md)** | ✅ |
+| | **Docker support (dashboard, MQTT broker, test runner)** | ✅ |
+| | **Integration tests (28 tests, MQTT + OTA + pipeline)** | ✅ |
+| | OTA firmware upgrade (MQTT + HTTP, serial UART) | ✅ |
 | | CI/CD (GitHub Actions: Python tests + firmware build) | ✅ |
 
 ## Energy Efficiency Gain
@@ -113,19 +122,22 @@ solar-ball/
 │       ├── sun_calc.h/.c           NOAA solar ephemeris (static)
 │       ├── display.h/.c            Sharp Memory LCD SPI driver (always-on MIP reflective)
 │       ├── remote_diag.h/.c        Scan/publish counters
+│       ├── ota.h/.c                OTA firmware upgrade (MQTT + HTTP, serial UART)
+│       ├── remote_config.h/.c      Remote config via MQTT (NVS persistent)
 │       └── scripts/
 │           └── generate_sensor_coords.py  Fibonacci sphere → C header
 ├── tools/
 │   ├── auto_calibrate.py           Calibration tool (--auto for sun, default for flashlight)
+│   ├── ota_update.py               OTA firmware update (serial UART or MQTT trigger)
 │   ├── mqtt_receiver.py            MQTT subscriber: (dx,dy,dz) → azimuth/elevation/panel angles
 │   └── requirements.txt            pyserial, colorama, paho-mqtt
 ├── tests/
-│   ├── run_all.py                  Test runner (7 suites)
+│   ├── run_all.py                  Test runner (8 suites)
 │   ├── test_direction.py           38 assertions — algorithm correctness
 │   ├── test_mqtt_protocol.py       25 assertions — JSON serialization
 │   ├── test_power.py               20 assertions — battery SOC calculation
 │   ├── test_calibration.py         246 assertions — channel mapping inversion
-│   ├── test_weather.py             25 assertions — overcast/night/fault classification
+│   ├── test_weather.py             26 assertions — overcast/night/fault classification
 │   ├── test_saturation.py          15 assertions — saturation detection
 │   ├── test_remote_diag.py         20 assertions — diagnostic protocol
 │   ├── test_autocal_validation.py  200-trial Monte Carlo — auto-cal accuracy
@@ -140,10 +152,25 @@ solar-ball/
 │   ├── operation_manual.md           **START HERE** — complete beginner guide (中文)
 │   ├── operation_manual_en.md        Operation Manual (English)
 │   ├── assembly_guide.md             Step-by-step build instructions
-│   └── calibration_procedure.md      Auto + manual calibration guide
+│   ├── calibration_procedure.md      Auto + manual calibration guide
+│   └── architecture.md               Full system design and data flow
 ├── .github/workflows/
 │   ├── test.yml                    Python tests on push
 │   └── firmware.yml                PlatformIO build on push
+├── web_dashboard/
+│   ├── app.py                      Flask backend + MQTT + SSE + SQLite
+│   ├── templates/index.html        Dashboard HTML
+│   ├── static/dashboard.js         Real-time frontend logic
+│   ├── Dockerfile                  Container for dashboard
+│   ├── requirements.txt            flask, paho-mqtt
+│   └── config.json                 Default settings
+├── docker/
+│   └── mosquitto.conf              Eclipse Mosquitto broker config
+├── docker-compose.yml              Dashboard + MQTT broker + test runner
+├── Dockerfile.test                 Container for automated tests
+├── .dockerignore
+├── CHANGELOG.md                    Full version history
+├── CONTRIBUTING.md                 Development guide
 ├── LICENSE                         MIT
 └── README.md
 ```
@@ -160,13 +187,27 @@ cd firmware && platformio run
 # Flash to ESP32
 platformio run --target upload
 
-# Run test suite (389 assertions, zero dependencies beyond Python 3)
+# Calibration with quality report
+python tools/auto_calibrate.py COM3 --report
+
+# OTA firmware update (serial UART)
+python tools/ota_update.py COM3 firmware/.pio/build/esp32dev/firmware.bin
+
+# OTA firmware update (MQTT trigger, remote)
+python tools/ota_update.py --mqtt --ball ball-001 --url http://your-server.com/ota.bin
+
+# Run test suite (418 assertions, zero dependencies beyond Python 3)
 cd tests && python run_all.py
 
 # Desktop simulation (no hardware needed)
 python tests/simulate.py                # random sun positions
 python tests/simulate.py --scan         # full sky sweep
 python tests/simulate.py --noiseless    # ideal sensor accuracy test
+
+# Docker (dashboard + MQTT broker + tests)
+docker compose up -d                    # start dashboard at http://localhost:5000
+docker compose --profile testing up tests  # run unit tests in container
+docker compose --profile testing up integration-tests  # run integration tests
 ```
 
 ## Calibration
@@ -240,6 +281,18 @@ Published every 5 seconds to `/solar/ball/{id}/direction`:
 | 8 | 0x0100 | Overcast sky (uniform illumination) |
 | 9 | 0x0200 | Nighttime (no signal) |
 
+### Command Topic (OTA)
+
+The ball subscribes to `/solar/ball/{id}/cmd` for remote commands.
+
+**Trigger OTA update:**
+
+```json
+{"cmd":"ota","url":"http://ota-server.example.com/solar-ball-v1.3.0.bin","version":"1.3.0"}
+```
+
+On receiving this, the ball downloads the firmware via the SIM7600G's HTTP client, writes it to the OTA partition, and reboots.
+
 ## Receiver
 
 ```bash
@@ -267,17 +320,50 @@ $ python tests/run_all.py
   test_mqtt_protocol.py     — 25 passed    JSON serialization
   test_power.py             — 20 passed    battery SOC interpolation
   test_calibration.py       — 246 passed   channel mapping inversion
-  test_weather.py           — 25 passed    overcast/night/fault classification
+  test_weather.py           — 26 passed    overcast/night/fault classification
   test_saturation.py        — 15 passed    saturation threshold detection
   test_remote_diag.py       — 20 passed    diagnostic protocol
+  test_integration.py       — 27 passed    E2E pipeline, MQTT, OTA, multi-ball, faults
 ============================================================
-All tests passed!  (389 assertions, zero failures)
+All tests passed!  (417 assertions, zero failures)
 ```
+
+### Integration tests (28 tests, 1 skipped):
+- Full sensor→direction→MQTT→receiver pipeline
+- MQTT v1.1 protocol field validation
+- OTA command protocol encode/decode
+- Multi-ball scenario testing
+- Fault detection pipeline
+- SQLite history logging
+- Live broker pub/sub (skipped without network)
 
 Additional validation scripts:
 - `test_autocal_validation.py` — 200-trial Monte Carlo, auto-cal achieves 0.3–0.5° mean error
 - `test_autocal_e2e.py` — Full GPS→ephemeris→calibrate→direction pipeline
 - `simulate.py` — Desktop simulator with noise modeling and accuracy sweep
+
+## Web Dashboard
+
+```bash
+# Start dashboard (connects to public MQTT broker by default)
+pip install -r web_dashboard/requirements.txt
+python web_dashboard/app.py
+
+# Custom broker
+python web_dashboard/app.py --broker 192.168.1.1 --port 5000
+
+# Docker
+docker compose up -d
+# Open http://localhost:5000
+```
+
+Features:
+- **Overview** — multi-ball cards with compass, SOC bar, confidence bar, faults
+- **Ball Detail** — full direction vector, panel angles, raw bitmask, timestamp
+- **History** — SQLite-backed query by ball ID, configurable limit
+- **OTA Update** — send OTA command via web UI to any ball
+- **SSE streaming** — real-time updates without polling
+- **REST API** — `/api/balls`, `/api/ball/<id>`, `/api/history/<id>`, `/api/ota`, `/api/stats`
 
 ## Key Design Decisions
 

@@ -2,13 +2,13 @@
 #define CONFIG_H
 
 /* ============================================================
- *  Configuration header for Solar Ball firmware v1.0
+ *  Configuration header for Solar Ball firmware v1.3
  *  Edit these values to match your hardware setup.
  * ============================================================ */
 
 /* ---------- Ball Identity ---------- */
 #define BALL_ID                 "ball-001"
-#define FIRMWARE_VERSION        "1.1.0"
+#define FIRMWARE_VERSION        "1.3.0"
 
 /* ---------- Sensor Sampling ---------- */
 #define SENSOR_COUNT            80
@@ -87,6 +87,13 @@
 #define CALIB_BASELINE_KEY      "baseline"
 #define CALIB_MAPPING_KEY       "ch_map"
 #define CALIB_SAMPLE_COUNT      100  /* samples per sensor during calibration */
+
+/* ---------- OTA Firmware Update ---------- */
+#define OTA_HTTP_MAX_RETRIES         3
+#define OTA_HTTP_RECV_TIMEOUT_MS     120000
+#define OTA_HTTP_CHUNK_TIMEOUT_MS    30000
+#define OTA_FW_URL_PREFIX            "http://ota.solar-ball.example.com/firmware/"
+#define OTA_MQTT_CMD_TOPIC           "/solar/ball/%s/cmd"
 
 /* ---------- NVS (Non-Volatile Storage) ---------- */
 #define NVS_PARTITION           "nvs"

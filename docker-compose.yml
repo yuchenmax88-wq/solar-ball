@@ -1,0 +1,80 @@
+version: "3.9"
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: solar-ball-mqtt
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./docker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-W", "2"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: web_dashboard/Dockerfile
+    container_name: solar-ball-dashboard
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+    command:
+      - "--host=0.0.0.0"
+      - "--port=5000"
+      - "--broker=mosquitto"
+      - "--mqtt-port=1883"
+      - "--topic=/solar/ball/+/direction"
+    volumes:
+      - dashboard_data:/app/data
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/stats"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: solar-ball-tests
+    command: ["python", "tests/run_all.py"]
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    profiles:
+      - testing
+
+  integration-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: solar-ball-integration-tests
+    command: ["python", "tests/run_integration.py"]
+    environment:
+      - MQTT_BROKER=mosquitto
+      - MQTT_PORT=1883
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    profiles:
+      - testing
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+  dashboard_data:

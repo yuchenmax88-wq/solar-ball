@@ -258,7 +258,7 @@ platformio device monitor
 You should see:
 
 ```
-Solar Ball v1.1.0 booting...
+Solar Ball v1.3.0 booting...
 Ball ID: ball-001
 No calibration data found. Using default normalization.
 ```
@@ -410,6 +410,6 @@ The ball auto-detects conditions:
 
 ---
 
-> **Firmware version**: v1.1.0  
+> **Firmware version**: v1.3.0  
 > **Last updated**: June 2026  
 > **Full documentation**: See `hardware/`, `docs/`, `tests/` directories in the repository

@@ -38,4 +38,18 @@ void sensor_diag_analyze(const sensor_diag_result_t *diag,
  */
 uint16_t sensor_diag_check_channel(uint16_t raw_value);
 
+/*
+ * Deep diagnostic analysis — produces a human-readable root cause report.
+ * Writes a compact string to `report` (max `report_len` bytes).
+ *
+ * Example output:
+ *   "3 sensors open (ch: 5,12,47). 2 saturated (ch: 30,61).
+ *    Overcast sky (CV=0.08). Confidence=64/255.
+ *    Root cause: uniform cloud cover — point zenith, ignore direction."
+ *
+ * Returns the report length (or 0 if no issues found).
+ */
+int sensor_diag_deep_analyze(const sensor_diag_result_t *diag,
+                             char *report, size_t report_len);
+
 #endif /* SENSOR_DIAG_H */

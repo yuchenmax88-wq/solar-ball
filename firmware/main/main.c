@@ -1,5 +1,5 @@
 /*
- * Solar Ball Firmware v1.1
+ * Solar Ball Firmware v1.3
  * ========================
  *
  * Main entry point. Flow:
@@ -36,6 +36,8 @@
 #include "calibrate.h"
 #include "display.h"
 #include "remote_diag.h"
+#include "ota.h"
+#include "remote_config.h"
 
 static const char *TAG = "solar-ball";
 
@@ -49,6 +51,14 @@ static int is_calibration_mode(void) {
 void app_main(void) {
     ESP_LOGI(TAG, "Solar Ball v%s booting...", FIRMWARE_VERSION);
     ESP_LOGI(TAG, "Ball ID: %s", BALL_ID);
+
+    /* ---- OTA partition validation ---- */
+    ota_init();
+    if (!ota_is_ota_partition_valid()) {
+        ESP_LOGW(TAG, "Booted from OTA partition — first boot after update.");
+        ota_mark_valid_and_reboot();
+        return;
+    }
 
     /* ---- Init ---- */
     power_init();
@@ -109,6 +119,10 @@ void app_main(void) {
     uint8_t flags = 0;
     sensor_diag_analyze(&diag, &error_mask, &confidence, &flags);
 
+    char deep_report[256];
+    sensor_diag_deep_analyze(&diag, deep_report, sizeof(deep_report));
+    ESP_LOGI(TAG, "Root cause: %s", deep_report);
+
     /* ---- Direction computation ---- */
     vec3_t direction;
     int direction_ok = direction_compute(sensor_values, &direction);
@@ -135,6 +149,76 @@ void app_main(void) {
 
     if (modem_init() == 0) {
         modem_sync_time();
+
+        mqtt_subscribe_cmd(BALL_ID);
+        remote_config_init();
+
+        char cmd_topic[MQTT_TOPIC_MAX_LEN];
+        char cmd_payload[MQTT_PAYLOAD_MAX_LEN];
+        memset(cmd_topic, 0, sizeof(cmd_topic));
+        memset(cmd_payload, 0, sizeof(cmd_payload));
+
+        if (mqtt_poll_message(cmd_topic, sizeof(cmd_topic),
+                              cmd_payload, sizeof(cmd_payload)) > 0) {
+            ESP_LOGI(TAG, "Received MQTT command: %s", cmd_payload);
+
+            if (strstr(cmd_payload, "\"cmd\":\"ota\"") != NULL) {
+                char *url_start = strstr(cmd_payload, "\"url\":\"");
+                if (url_start) {
+                    url_start += 7;
+                    char *url_end = strchr(url_start, '"');
+                    if (url_end) {
+                        size_t url_len = url_end - url_start;
+                        char ota_url[OTA_URL_MAX_LEN];
+                        snprintf(ota_url, sizeof(ota_url), "%.*s", (int)url_len, url_start);
+
+                        char ota_version[OTA_FW_VERSION_MAX_LEN] = "unknown";
+                        char *ver_start = strstr(cmd_payload, "\"version\":\"");
+                        if (ver_start) {
+                            ver_start += 11;
+                            char *ver_end = strchr(ver_start, '"');
+                            if (ver_end) {
+                                size_t vlen = ver_end - ver_start;
+                                if (vlen < sizeof(ota_version)) {
+                                    memcpy(ota_version, ver_start, vlen);
+                                    ota_version[vlen] = '\0';
+                                }
+                            }
+                        }
+
+                        ESP_LOGI(TAG, "OTA triggered via MQTT: %s (v%s)", ota_url, ota_version);
+
+                        int fw_size = modem_http_head_size(ota_url);
+                        if (fw_size > 0 && fw_size <= OTA_IMAGE_MAX_SIZE) {
+                            if (ota_begin(ota_version, fw_size) == 0) {
+                                int dl_ret = modem_http_download_chunked(
+                                    ota_url, ota_write_chunk);
+                                if (dl_ret == 0) {
+                                    ota_finish();
+                                    ESP_LOGI(TAG, "OTA update complete, rebooting...");
+                                    vTaskDelay(pdMS_TO_TICKS(2000));
+                                    esp_restart();
+                                } else {
+                                    ota_abort();
+                                    ESP_LOGE(TAG, "OTA download failed");
+                                    error_mask |= FAULT_MQTT_ERROR;
+                                }
+                            }
+                        } else {
+                            ESP_LOGE(TAG, "Invalid firmware size: %d", fw_size);
+                        }
+                    }
+                }
+            }
+
+            if (strstr(cmd_payload, "\"cmd\":\"config\"") != NULL) {
+                char config_resp[MQTT_PAYLOAD_MAX_LEN];
+                if (remote_config_handle_mqtt(cmd_payload, config_resp,
+                                              sizeof(config_resp)) == 0) {
+                    ESP_LOGI(TAG, "Config applied: %s", config_resp);
+                }
+            }
+        }
         rssi = modem_get_rssi();
         modem_get_unix_time(&unix_ts);
 

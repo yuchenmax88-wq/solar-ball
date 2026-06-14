@@ -19,14 +19,17 @@ def build_mqtt_topic(ball_id: str) -> str:
 def serialize_direction(pkt: dict) -> str:
     """
     snprintf(buf, buf_len,
-        '{"id":"%s","ts":%lu,"dx":%.4f,"dy":%.4f,"dz":%.4f,"soc":%u,"rssi":%d}',
-        pkt->id, pkt->ts, pkt->dx, pkt->dy, pkt->dz, pkt->soc, pkt->rssi)
+        '{"id":"%s","ts":%lu,"dx":%.4f,"dy":%.4f,"dz":%.4f,'
+        '"soc":%u,"rssi":%d,"err":%u,"conf":%u,"flags":%u}',
+        ...)
     """
     return (
         f'{{"id":"{pkt["id"]}","ts":{pkt["ts"]},'
         f'"dx":{pkt["dx"]:.4f},"dy":{pkt["dy"]:.4f},'
         f'"dz":{pkt["dz"]:.4f},'
-        f'"soc":{pkt["soc"]},"rssi":{pkt["rssi"]}}}'
+        f'"soc":{pkt["soc"]},"rssi":{pkt["rssi"]},'
+        f'"err":{pkt.get("err",0)},"conf":{pkt.get("conf",0)},'
+        f'"flags":{pkt.get("flags",0)}}}'
     )
 
 
@@ -72,6 +75,9 @@ def test_serialize_valid():
         "dz": 0.9352,
         "soc": 87,
         "rssi": -89,
+        "err": 0,
+        "conf": 220,
+        "flags": 9,
     }
     s = serialize_direction(pkt)
     parsed = json.loads(s)
@@ -83,6 +89,9 @@ def test_serialize_valid():
     check("dz matches", abs(parsed["dz"] - 0.9352) < 0.0001)
     check("soc matches", parsed["soc"] == 87)
     check("rssi matches", parsed["rssi"] == -89)
+    check("err matches", parsed["err"] == 0)
+    check("conf matches", parsed["conf"] == 220)
+    check("flags matches", parsed["flags"] == 9)
 
 
 def test_serialize_boundary_values():
@@ -148,8 +157,8 @@ def test_serialize_small_float():
         "rssi": -50,
     }
     s = serialize_direction(pkt)
-    check("no scientific notation", "e" not in s)
-    check("no uppercase E", "E" not in s)
+    check("no scientific notation", s.find("e-") == -1)
+    check("no uppercase E-", s.find("E-") == -1)
 
 
 def test_payload_max_len():

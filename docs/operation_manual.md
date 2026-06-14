@@ -258,7 +258,7 @@ platformio device monitor
 应该看到：
 
 ```
-Solar Ball v1.1.0 booting...
+Solar Ball v1.3.0 booting...
 Ball ID: ball-001
 No calibration data found. Using default normalization.
 ```
@@ -410,6 +410,6 @@ python mqtt_receiver.py
 
 ---
 
-> **固件版本**：v1.1.0  
+> **固件版本**：v1.3.0  
 > **上次更新**：2026-06  
 > **完整文档**：见仓库内 `hardware/`、`docs/`、`tests/` 目录

@@ -30,6 +30,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "config.h"
+#include "ota.h"
 
 #define MQTT_TOPIC_MAX_LEN      64
 #define MQTT_PAYLOAD_MAX_LEN    320
@@ -53,6 +54,33 @@
 #define FLAG_NIGHT              0x04    /* nighttime (insufficient light) */
 #define FLAG_CALIBRATED         0x08    /* using calibrated mapping */
 #define FLAG_BASELINE_CAL       0x10    /* using baseline normalization */
+
+/* OTA command types (received via MQTT) */
+#define OTA_CMD_START            0x01    /* begin OTA download */
+#define OTA_CMD_ABORT            0x02    /* abort in-progress OTA */
+#define OTA_CMD_STATUS           0x03    /* request OTA status */
+
+#define OTA_FLAG_NONE            0x00
+#define OTA_FLAG_FORCE           0x01    /* force update even if same version */
+
+/* MQTT command payload structure */
+typedef struct __attribute__((packed)) {
+    uint8_t  cmd;               /* command type */
+    uint8_t  flags;             /* command flags */
+    char     url[OTA_URL_MAX_LEN];  /* firmware download URL */
+    char     version[OTA_FW_VERSION_MAX_LEN]; /* expected version string */
+} ota_cmd_packet_t;
+
+/* OTA status response payload */
+typedef struct __attribute__((packed)) {
+    uint8_t  state;             /* ota_state_t */
+    uint8_t  progress_pct;
+    uint32_t total_bytes;
+    uint32_t written_bytes;
+    char     current_version[OTA_FW_VERSION_MAX_LEN];
+    char     new_version[OTA_FW_VERSION_MAX_LEN];
+    int      last_error;
+} ota_status_packet_t;
 
 /* JSON payload structure, 1:1 mapping to wire format */
 typedef struct __attribute__((packed)) {
