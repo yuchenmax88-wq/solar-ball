@@ -7,7 +7,6 @@
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --sky-top: #1a1a2e; --sky-bot: #16213e;
   --card-bg: rgba(15,23,42,.92); --card-border: rgba(255,255,255,.08);
   --text: #e8e8f0; --muted: #8899aa; --sun: #f59e0b; --sun-glow: rgba(245,158,11,.4);
   --green: #10b981; --yellow: #f59e0b; --red: #ef4444; --blue: #3b82f6;
@@ -16,12 +15,8 @@
 body {
   font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
   background: linear-gradient(180deg, #0b0e1a 0%, #121b2f 40%, #1a2540 100%);
-  color: var(--text); min-height: 100vh;
-  background-attachment: fixed;
+  color: var(--text); min-height: 100vh; background-attachment: fixed;
 }
-body.night { --sky-top: #06080f; --sky-bot: #0a0f1c; }
-body.day   { --sky-top: #1a3a5c; --sky-bot: #2d5a87; }
-
 .header {
   background: rgba(10,14,28,.95); backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--card-border);
@@ -29,17 +24,19 @@ body.day   { --sky-top: #1a3a5c; --sky-bot: #2d5a87; }
   align-items: center; position: sticky; top: 0; z-index: 100;
 }
 .header-left { display: flex; align-items: center; gap: 10px; }
-.header-sun {
-  width: 28px; height: 28px; border-radius: 50%;
+.header-sun { width: 28px; height: 28px; border-radius: 50%;
   background: radial-gradient(circle, #fbbf24, #f59e0b 60%, transparent 70%);
-  box-shadow: 0 0 16px var(--sun-glow);
-}
-.header h1 { font-size: 1.15em; font-weight: 700; letter-spacing: .02em; }
+  box-shadow: 0 0 16px var(--sun-glow); }
+.header h1 { font-size: 1.15em; font-weight: 700; }
 .header h1 span { color: var(--sun); }
+.lang-btn { background: rgba(255,255,255,.06); border: 1px solid var(--card-border);
+  color: var(--muted); padding: 4px 10px; border-radius: 6px; cursor: pointer;
+  font-size: .78em; margin-left: 10px; transition: all .15s; }
+.lang-btn:hover { color: var(--text); border-color: var(--sun); }
+.lang-btn.active { color: var(--sun); border-color: var(--sun); }
 .status-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 4px; }
 .status-dot.online { background: var(--green); box-shadow: 0 0 6px rgba(16,185,129,.6); }
 .status-dot.offline { background: var(--red); }
-
 .tabs-wrap { overflow-x: auto; scrollbar-width: none; }
 .tabs { display: flex; gap: 0; margin: 0 16px; min-width: max-content; }
 .tab { padding: 10px 18px; background: transparent; border: none;
@@ -47,79 +44,52 @@ body.day   { --sky-top: #1a3a5c; --sky-bot: #2d5a87; }
   font-size: .84em; font-weight: 500; white-space: nowrap; transition: all .2s; }
 .tab:hover { color: #cbd5e1; }
 .tab.active { color: var(--sun); border-bottom-color: var(--sun); }
-
 .panel { padding: 20px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
-
-.card {
-  background: var(--card-bg); border: 1px solid var(--card-border);
-  border-radius: var(--radius); padding: 18px;
-  backdrop-filter: blur(6px);
-}
-.card-title { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-size: .88em;
-  font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.card { background: var(--card-bg); border: 1px solid var(--card-border);
+  border-radius: var(--radius); padding: 18px; backdrop-filter: blur(6px); }
+.card-title { display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
+  font-size: .88em; font-weight: 600; letter-spacing: .04em; color: var(--muted); }
 .card-title .dot { width: 8px; height: 8px; border-radius: 50%; }
 .card-title .dot.ok { background: var(--green); }
 .card-title .dot.warn { background: var(--yellow); }
 .card-title .dot.err { background: var(--red); }
-
-/* ---- Sun Position Visualizer ---- */
-.sun-viz { position: relative; width: 100%; height: 180px; overflow: hidden; border-radius: 10px;
-  margin-bottom: 10px; }
+.sun-viz { position: relative; width: 100%; height: 180px; overflow: hidden;
+  border-radius: 10px; margin-bottom: 10px; }
 .sun-viz .sky { position: absolute; inset: 0;
   background: linear-gradient(180deg, #1a3a5c 0%, #2d5a87 30%, #5b8cb8 50%, #87b5d8 70%, #c4dce8 100%); }
 .sun-viz .ground { position: absolute; bottom: 0; left: 0; right: 0; height: 25%;
   background: linear-gradient(180deg, #2d4a3a 0%, #1a3020 100%); }
-.sun-viz .panel-group { position: absolute; bottom: 15%; left: 50%; transform: translateX(-50%);
-  display: flex; gap: 6px; }
-.sun-viz .panel-unit {
-  width: 40px; height: 12px; background: linear-gradient(180deg, #2563eb, #1d4ed8);
-  border-radius: 2px 2px 0 0; transition: transform .3s;
-  transform-origin: bottom center; box-shadow: 0 0 4px rgba(59,130,246,.3);
-}
-.sun-viz .sun-arc { position: absolute; bottom: 25%; left: 0; right: 0; height: 75%;
-  border-radius: 50% 50% 0 0; pointer-events: none; }
+.sun-viz .panel-group { position: absolute; bottom: 15%; left: 50%;
+  transform: translateX(-50%); display: flex; gap: 6px; }
+.sun-viz .panel-unit { width: 40px; height: 12px;
+  background: linear-gradient(180deg, #2563eb, #1d4ed8); border-radius: 2px 2px 0 0;
+  transition: transform .3s; transform-origin: bottom center;
+  box-shadow: 0 0 4px rgba(59,130,246,.3); }
 .sun-viz .sun-dot { position: absolute; width: 28px; height: 28px; border-radius: 50%;
   background: radial-gradient(circle at 40% 40%, #fff, #fde047, #f59e0b 80%);
   box-shadow: 0 0 24px var(--sun-glow), 0 0 60px rgba(245,158,11,.15);
   transform: translate(-50%, -50%); transition: left .8s ease, top .8s ease; }
-.sun-viz .sun-rays { position: absolute; width: 100px; height: 100px; top: 50%; left: 50%;
-  transform: translate(-50%, -50%); pointer-events: none; opacity: .15; }
-.sun-viz .elev-line { position: absolute; bottom: 25%; border-top: 1px dashed rgba(255,255,255,.2);
-  left: 10%; right: 10%; }
-.sun-viz .az-label { position: absolute; bottom: 6px; font-size: .6em; color: rgba(255,255,255,.5); transform: translateX(-50%); }
-.sun-viz .elev-label { position: absolute; right: 6px; font-size: .6em; color: rgba(255,255,255,.5); transform: translateY(-50%); }
-
-/* ---- Stat Row ---- */
 .stat-row { display: flex; justify-content: space-between; align-items: center;
   padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.04); }
 .stat-label { color: var(--muted); font-size: .8em; }
 .stat-value { font-weight: 600; font-variant-numeric: tabular-nums; font-size: .9em; }
-
 .badge { display: inline-block; padding: 2px 7px; border-radius: 4px;
   font-size: .7em; font-weight: 600; margin: 1px 2px; }
 .badge-ok { background: rgba(16,185,129,.18); color: var(--green); }
 .badge-warn { background: rgba(245,158,11,.18); color: var(--yellow); }
 .badge-err { background: rgba(239,68,68,.18); color: var(--red); }
 .badge-info { background: rgba(59,130,246,.18); color: var(--blue); }
-
-.bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.06); overflow: hidden; margin: 3px 0; }
+.bar { height: 6px; border-radius: 3px; background: rgba(255,255,255,.06);
+  overflow: hidden; margin: 3px 0; }
 .bar-fill { height: 100%; border-radius: 3px; transition: width .6s ease; }
 .bar-soc .bar-fill { background: linear-gradient(90deg, var(--red), var(--yellow) 40%, var(--green) 70%); }
 .bar-conf .bar-fill { background: linear-gradient(90deg, var(--yellow), var(--blue)); }
-
-/* ---- Table ---- */
-table { width: 100%; border-collapse: collapse; font-size: .8em; }
-th { text-align: left; color: var(--muted); padding: 8px 6px;
-  border-bottom: 1px solid var(--card-border); font-weight: 500; }
-td { padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,.02); }
-
 .form-group { margin-bottom: 10px; }
 .form-group label { display: block; color: var(--muted); font-size: .8em; margin-bottom: 3px; }
-.form-group input, .form-group select {
-  width: 100%; padding: 8px 10px; background: rgba(255,255,255,.04);
-  border: 1px solid var(--card-border); border-radius: 8px;
-  color: var(--text); font-size: .88em; outline: none; }
+.form-group input, .form-group select { width: 100%; padding: 8px 10px;
+  background: rgba(255,255,255,.04); border: 1px solid var(--card-border);
+  border-radius: 8px; color: var(--text); font-size: .88em; outline: none; }
 .form-group input:focus, .form-group select:focus { border-color: var(--sun); }
 .btn { padding: 8px 18px; border: none; border-radius: 8px; font-size: .84em;
   font-weight: 600; cursor: pointer; transition: all .15s; }
@@ -128,9 +98,7 @@ td { padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,.02); }
 .hidden { display: none !important; }
 .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
 .empty-state .icon { font-size: 3.5em; margin-bottom: 12px; opacity: .6; }
-
 .chart-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
-
 @media (max-width: 480px) {
   .grid { grid-template-columns: 1fr; }
   .chart-row { grid-template-columns: 1fr; }
@@ -148,18 +116,20 @@ td { padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,.02); }
   </div>
   <span style="font-size:.82em;color:var(--muted)">
     <span class="status-dot" id="conn-status"></span>
-    <span id="conn-text">connecting</span>
-    &nbsp;·&nbsp; <strong id="ball-count" style="color:var(--sun)">0</strong> balls
+    <span id="conn-text"></span>
+    &nbsp;·&nbsp; <strong id="ball-count" style="color:var(--sun)">0</strong> <span id="conn-balls"></span>
+    <button class="lang-btn active" data-lang="zh">中</button>
+    <button class="lang-btn" data-lang="en">EN</button>
   </span>
 </div>
 
 <div class="tabs-wrap">
 <div class="tabs">
-  <div class="tab active" data-tab="overview">Overview</div>
-  <div class="tab" data-tab="detail">Ball Detail</div>
-  <div class="tab" data-tab="charts">History Charts</div>
-  <div class="tab" data-tab="ota">OTA Update</div>
-  <div class="tab" data-tab="config">Config Wizard</div>
+  <div class="tab active" data-tab="overview" data-i18n="tab_overview">总览</div>
+  <div class="tab" data-tab="detail" data-i18n="tab_detail">详情</div>
+  <div class="tab" data-tab="charts" data-i18n="tab_charts">历史图表</div>
+  <div class="tab" data-tab="ota" data-i18n="tab_ota">固件升级</div>
+  <div class="tab" data-tab="config" data-i18n="tab_config">配置向导</div>
 </div>
 </div>
 
@@ -168,9 +138,9 @@ td { padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,.02); }
   <div class="grid" id="balls-container">
     <div class="empty-state">
       <div class="icon">&#9788;</div>
-      <p>Waiting for Solar Ball data...</p>
+      <p data-i18n="waiting_data">等待 Solar Ball 数据...</p>
       <p style="font-size:.78em;margin-top:4px;color:var(--muted)">
-        MQTT topic: <code style="color:var(--sun)">/solar/ball/+/direction</code>
+        MQTT: <code style="color:var(--sun)">/solar/ball/+/direction</code>
       </p>
     </div>
   </div>
@@ -181,7 +151,7 @@ td { padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,.02); }
   <div style="margin-bottom:14px">
     <select id="detail-select" style="padding:7px 12px;background:rgba(255,255,255,.04);
       border:1px solid var(--card-border);border-radius:8px;color:var(--text);font-size:.88em;min-width:160px;">
-      <option value="">-- Select Ball --</option>
+      <option value="" data-i18n="select_ball">-- 选择设备 --</option>
     </select>
   </div>
   <div id="detail-content"></div>
@@ -191,36 +161,36 @@ td { padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,.02); }
 <div id="panel-charts" class="panel hidden">
   <div style="margin-bottom:14px;display:flex;gap:12px;align-items:end;flex-wrap:wrap">
     <div class="form-group" style="margin-bottom:0">
-      <label>Ball</label>
+      <label data-i18n="ball">设备</label>
       <select id="chart-ball" style="min-width:150px">
-        <option value="">-- Select --</option>
+        <option value="" data-i18n="select">-- 选择 --</option>
       </select>
     </div>
     <div class="form-group" style="margin-bottom:0">
-      <label>Points</label>
+      <label data-i18n="points">点数</label>
       <select id="chart-limit">
         <option value="20">20</option><option value="50">50</option>
         <option value="100" selected>100</option><option value="200">200</option>
       </select>
     </div>
-    <button class="btn btn-primary" id="chart-load">Load</button>
+    <button class="btn btn-primary" id="chart-load" data-i18n="load">加载</button>
   </div>
   <div class="chart-row">
-    <div class="card"><div class="card-title">Direction Trajectory</div><canvas id="chart-trajectory" style="max-height:260px"></canvas></div>
-    <div class="card"><div class="card-title">Battery &amp; Signal</div><canvas id="chart-telemetry" style="max-height:260px"></canvas></div>
-    <div class="card"><div class="card-title">Confidence Trend</div><canvas id="chart-confidence" style="max-height:260px"></canvas></div>
-    <div class="card"><div class="card-title">Fault Timeline</div><canvas id="chart-faults" style="max-height:260px"></canvas></div>
+    <div class="card"><div class="card-title" data-i18n="chart_traj">方向轨迹</div><canvas id="chart-trajectory" style="max-height:260px"></canvas></div>
+    <div class="card"><div class="card-title" data-i18n="chart_tele">电池 &amp; 信号</div><canvas id="chart-telemetry" style="max-height:260px"></canvas></div>
+    <div class="card"><div class="card-title" data-i18n="chart_conf">置信度趋势</div><canvas id="chart-confidence" style="max-height:260px"></canvas></div>
+    <div class="card"><div class="card-title" data-i18n="chart_fault">故障时间线</div><canvas id="chart-faults" style="max-height:260px"></canvas></div>
   </div>
 </div>
 
 <!-- OTA -->
 <div id="panel-ota" class="panel hidden">
   <div class="card" style="max-width:480px">
-    <div class="card-title">&#11015; Firmware Update</div>
-    <div class="form-group"><label>Ball ID</label><select id="ota-ball"><option value="ball-001">ball-001</option></select></div>
-    <div class="form-group"><label>Firmware URL</label><input type="url" id="ota-url" placeholder="http://ota.example.com/solar-ball.bin"></div>
-    <div class="form-group"><label>Version</label><input type="text" id="ota-version" value="1.3.0"></div>
-    <button class="btn btn-primary" id="ota-send">Send Update</button>
+    <div class="card-title">&#11015; <span data-i18n="ota_title">固件升级</span></div>
+    <div class="form-group"><label data-i18n="ball_id">设备 ID</label><select id="ota-ball"><option value="ball-001">ball-001</option></select></div>
+    <div class="form-group"><label data-i18n="fw_url">固件 URL</label><input type="url" id="ota-url" placeholder="http://ota.example.com/solar-ball.bin"></div>
+    <div class="form-group"><label data-i18n="version">版本</label><input type="text" id="ota-version" value="1.3.0"></div>
+    <button class="btn btn-primary" id="ota-send" data-i18n="ota_send">发送升级指令</button>
     <div id="ota-result" style="margin-top:10px;font-size:.82em"></div>
   </div>
 </div>
@@ -228,21 +198,21 @@ td { padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,.02); }
 <!-- CONFIG -->
 <div id="panel-config" class="panel hidden">
   <div class="card" style="max-width:520px">
-    <div class="card-title">&#9881; Generate config.h</div>
-    <p style="color:var(--muted);font-size:.78em;margin-bottom:14px">
-      Configure your Solar Ball, then copy the generated header.
+    <div class="card-title">&#9881; <span data-i18n="cfg_title">生成 config.h</span></div>
+    <p style="color:var(--muted);font-size:.78em;margin-bottom:14px" data-i18n="cfg_desc">
+      配置你的 Solar Ball，然后复制生成的头文件。
     </p>
-    <div class="form-group"><label>Ball ID</label><input type="text" id="cfg-ball-id" value="ball-001"></div>
-    <div class="form-group"><label>Firmware Version</label><input type="text" id="cfg-version" value="1.3.0"></div>
+    <div class="form-group"><label data-i18n="ball_id">设备 ID</label><input type="text" id="cfg-ball-id" value="ball-001"></div>
+    <div class="form-group"><label data-i18n="fw_version">固件版本</label><input type="text" id="cfg-version" value="1.3.0"></div>
     <div class="form-group"><label>MQTT Broker</label><input type="text" id="cfg-broker" value="broker.emqx.io"></div>
-    <div class="form-group"><label>MQTT Port</label><input type="number" id="cfg-broker-port" value="1883" min="1" max="65535"></div>
+    <div class="form-group"><label data-i18n="mqtt_port">MQTT 端口</label><input type="number" id="cfg-broker-port" value="1883" min="1" max="65535"></div>
     <div class="form-group"><label>APN</label><input type="text" id="cfg-apn" value="cmiot"></div>
-    <div class="form-group"><label>APN User</label><input type="text" id="cfg-apn-user" placeholder="(usually empty)"></div>
-    <div class="form-group"><label>APN Password</label><input type="text" id="cfg-apn-pass" placeholder="(usually empty)"></div>
-    <div class="form-group"><label>Scan Interval (s)</label><input type="number" id="cfg-scan-interval" value="5" min="1" max="3600"></div>
-    <div class="form-group"><label>Battery Full (mV)</label><input type="number" id="cfg-bat-full" value="4200" min="1000" max="5000"></div>
-    <div class="form-group"><label>Battery Empty (mV)</label><input type="number" id="cfg-bat-empty" value="3200" min="1000" max="5000"></div>
-    <button class="btn btn-primary" id="cfg-generate">Generate</button>
+    <div class="form-group"><label data-i18n="apn_user">APN 用户名</label><input type="text" id="cfg-apn-user" placeholder="(usually empty)"></div>
+    <div class="form-group"><label data-i18n="apn_pass">APN 密码</label><input type="text" id="cfg-apn-pass" placeholder="(usually empty)"></div>
+    <div class="form-group"><label data-i18n="scan_interval">扫描间隔 (s)</label><input type="number" id="cfg-scan-interval" value="5" min="1" max="3600"></div>
+    <div class="form-group"><label data-i18n="bat_full">满电电压 (mV)</label><input type="number" id="cfg-bat-full" value="4200" min="1000" max="5000"></div>
+    <div class="form-group"><label data-i18n="bat_empty">空电电压 (mV)</label><input type="number" id="cfg-bat-empty" value="3200" min="1000" max="5000"></div>
+    <button class="btn btn-primary" id="cfg-generate" data-i18n="generate">生成</button>
     <div id="cfg-output" style="margin-top:10px"></div>
   </div>
 </div>
