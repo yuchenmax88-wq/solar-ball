@@ -298,9 +298,8 @@ def api_ota_trigger():
 
 @app.route("/api/stats")
 def api_stats():
-    try:
-        conn = sqlite3.connect(str(DB_PATH))
-        total = conn.execute("SELECT COUNT(*) FROM direction_log").fetchone()[0]
+    conn = sqlite3.connect(str(DB_PATH))
+    total = conn.execute("SELECT COUNT(*) FROM direction_log").fetchone()[0]
     balls = conn.execute(
         "SELECT ball_id, COUNT(*) as cnt, MAX(ts) as last_ts FROM direction_log GROUP BY ball_id"
     ).fetchall()
